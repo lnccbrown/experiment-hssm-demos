@@ -1,6 +1,6 @@
 # Shared typed contracts for trials, experiments, and jsPsych result payloads.
 # Separates stimulus semantics (``stimulus_factors``) from presentation-only ``display_params``.
-# Imported by trial generators, timelines, observers, and analysis code.
+# Imported by trial generators, timelines, actors, and analysis code.
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ class Trial(TypedDict):
 
     ``stimulus_factors`` holds experimental factors that control the stimulus.
     ``display_params`` holds rendering/presentation parameters.
-    Latent ``stim_strengths`` for the observer are derived from
-    ``stimulus_factors`` inside the observer, not stored on the trial.
+    Latent ``stim_strengths`` for the actor are derived from
+    ``stimulus_factors`` inside the actor, not stored on the trial.
     ``presentation_duration_ms`` is ``None`` for unlimited (response-terminated).
     """
 

@@ -12,13 +12,13 @@ It is organized as a modular workflow that combines:
 
 From this directory:
 
-**Heuristic observer** (noisy evidence + coherence-scaled RT):
+**Prior predictive actor** (Gaussian subject sampling + prior predictive forward model):
 
 ```bash
-uv run marimo run experiments/coherence_demo/heuristic_coherence_demo.py
+uv run marimo run experiments/coherence_demo/priorPredictive_coherence_demo.py
 ```
 
-**Forward DDM observer** (ssm-simulators, SSM parameters):
+**Forward DDM actor** (ssm-simulators, SSM parameters):
 
 ```bash
 uv run marimo run experiments/coherence_demo/ssm_coherence_demo.py
@@ -32,7 +32,7 @@ uv run marimo edit experiments/coherence_demo/ssm_coherence_demo.py
 
 ### Notes
 
-- The tutorial simulates a **binary left/right motion task** for multiple observers and trials using **jsPsych-style** trial objects in Python; motion previews use **Canvas** in the browser.
+- The tutorial simulates a **binary left/right motion task** for multiple actors and trials using **jsPsych-style** trial objects in Python; motion previews use **Canvas** in the browser.
 - HSSM fitting is triggered with a dedicated **Run hssm fit** button after simulation.
 - The end-of-pipeline model visualization uses `hssm.plotting.plot_model_cartoon`.
 

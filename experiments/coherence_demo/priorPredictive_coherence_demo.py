@@ -1,11 +1,11 @@
 import marimo
 
-# Marimo app: motion-coherence demo with ``NAfcObserver`` (heuristic evidence + RT).
+# Marimo app: motion-coherence demo with ``PriorPredictiveActor`` (prior predictive + subject sampling).
 # Wires sliders, participant demo iframe, simulation, and HSSM fitting.
-# Entry point: ``marimo run experiments/coherence_demo/heuristic_coherence_demo.py``.
+# Entry point: ``marimo run experiments/coherence_demo/priorPredictive_coherence_demo.py``.
 
 # Ensure project root is importable when running via
-# `marimo run experiments/coherence_demo/heuristic_coherence_demo.py`.
+# `marimo run experiments/coherence_demo/priorPredictive_coherence_demo.py`.
 import sys
 from pathlib import Path
 
@@ -16,7 +16,7 @@ def resolve_repo_paths() -> tuple[Path, Path]:
         if (
             app_dir.is_dir()
             and (candidate / "schemas").is_dir()
-            and (candidate / "observers").is_dir()
+            and (candidate / "actors").is_dir()
         ):
             return app_dir, candidate
     app_dir = Path(__file__).resolve().parent
@@ -44,13 +44,13 @@ def _():
         if (
             _app_dir.is_dir()
             and (candidate / "schemas").is_dir()
-            and (candidate / "observers").is_dir()
+            and (candidate / "actors").is_dir()
         ):
             app_dir, project_root = _app_dir, candidate
             break
     else:
         raise RuntimeError(
-            "Could not find repo root (need schemas/ and observers/). "
+            "Could not find repo root (need schemas/ and actors/). "
             "Run marimo from the simulator project directory."
         )
 
@@ -64,7 +64,7 @@ def _():
 
 @app.cell
 def _(mo, project_root):
-    from observers.heuristic_observer import NAfcObserver
+    from actors.prior_predictive_subject_actor import PriorPredictiveActor
     from analysis.hssm_pipeline import (
         fit_hssm_model,
         summarize_behavior,
@@ -89,7 +89,7 @@ def _(mo, project_root):
     return (
         ExperimentGenerator,
         FactorTrialGenerator,
-        NAfcObserver,
+        PriorPredictiveActor,
         build_coherence_demo_levels,
         build_coherence_timeline,
         build_jspsych_runner_html,
@@ -130,13 +130,13 @@ def _(app_dir, mo, project_root):
         "</div>"
     )
     intro_title = mo.md(
-        "## Heuristic observer: simulated experiment to HSSM pipeline (motion coherence)"
+        "## Demonstration of an experiment-to-HSSM pipeline for a motion coherence task with a prior predictive actor"
     )
     intro_body = mo.md(
         r"""
 This example simulates a **binary left/right motion task** at **three coherence levels** you set with the sliders (shown side-by-side).
 
-- **Observer**: ``NAfcObserver`` — noisy latent evidence, **argmax** choice, coherence-scaled RT heuristics.
+- **Actor**: ``PriorPredictiveActor`` — Gaussian sampling over prior predictive parameters, then noisy evidence, **argmax** choice, coherence-scaled RT.
 - **Task**: trials are generated and run in the in-browser demonstration.
 - **Fit**: fits a **HSSM** DDM with drift \(v\) regressed on coherence (`stim_level`, proportion).
 """
@@ -385,7 +385,7 @@ def _(mo):
         value=100,
         label="Trials per level (count)",
     )
-    n_observers = mo.ui.number(
+    n_actors = mo.ui.number(
         start=1,
         stop=30,
         value=3,
@@ -436,39 +436,94 @@ def _(mo):
         label="RT noise SD (s)",
     )
 
+    sigma0_sd = mo.ui.number(
+        start=0.0,
+        stop=2.0,
+        value=0.0,
+        step=0.05,
+        label="σ₀ sampling SD",
+    )
+    sigma_scale_sd = mo.ui.number(
+        start=0.0,
+        stop=2.0,
+        value=0.0,
+        step=0.05,
+        label="σ scale sampling SD",
+    )
+    lapse_sd = mo.ui.number(
+        start=0.0,
+        stop=0.1,
+        value=0.0,
+        step=0.005,
+        label="Lapse rate sampling SD",
+    )
+    ndt_sd = mo.ui.number(
+        start=0.0,
+        stop=0.5,
+        value=0.0,
+        step=0.01,
+        label="NDT sampling SD (s)",
+    )
+    rt_scale_sd = mo.ui.number(
+        start=0.0,
+        stop=0.5,
+        value=0.0,
+        step=0.05,
+        label="RT scale sampling SD (s)",
+    )
+    rt_noise_sd = mo.ui.number(
+        start=0.0,
+        stop=0.2,
+        value=0.0,
+        step=0.01,
+        label="RT noise sampling SD (s)",
+    )
+
     run_sim = mo.ui.run_button(label="Run simulation")
 
     return (
         lapse,
-        n_observers,
+        lapse_sd,
+        n_actors,
         n_trials,
         ndt,
+        ndt_sd,
         rt_noise,
+        rt_noise_sd,
         rt_scale,
+        rt_scale_sd,
         run_sim,
         sigma0,
+        sigma0_sd,
         sigma_scale,
+        sigma_scale_sd,
     )
 
 
 @app.cell
 def _(
     lapse,
+    lapse_sd,
     mo,
-    n_observers,
+    n_actors,
     n_trials,
     ndt,
+    ndt_sd,
     rt_noise,
+    rt_noise_sd,
     rt_scale,
+    rt_scale_sd,
     run_sim,
     sigma0,
+    sigma0_sd,
     sigma_scale,
+    sigma_scale_sd,
 ):
     simulator_info_row = mo.Html(
         """
 <div class="coherence-demo-simulator-info">
   <details>
-    <summary aria-label="How the simulated observer works">
+    <summary aria-label="How the simulated actor works">
       <span>Simulator Info</span>
       <span class="coherence-demo-simulator-info__badge">?</span>
     </summary>
@@ -477,8 +532,10 @@ def _(
       runs every combination of the three coherence levels (A/B/C) and your chosen trial count.
       Each trial is a binary left/right motion discrimination with random direction, using the
       same side-strength encoding as the browser demo.</p>
-      <p><strong>Observer.</strong> Responses are generated by
-      <code>NAfcObserver</code>: per-alternative evidence is <em>weight × strength + noise</em>,
+      <p><strong>Actor.</strong> Each participant draws prior predictive parameters from
+      <code>PriorPredictiveActor</code> (Gaussian means from <em>Actor means</em>,
+      SDs from <em>Sampling variance</em>), then simulates with the same forward model as
+      <code>NAfcActor</code>: per-alternative evidence is <em>weight × strength + noise</em>,
       with noise increasing as coherence decreases; choices follow a lapse draw or
       <code>argmax</code> on evidence; RT uses non-decision time plus a term inversely related
       to coherence via ``rt_scale × (1 − coherence)`` (or a lapse RT path).</p>
@@ -495,11 +552,15 @@ def _(
             mo.md("### Simulation"),
             mo.accordion(
                 {
-                    "Heuristic simulator settings": mo.vstack(
+                    "Prior predictive simulator settings": mo.vstack(
                         [
-                            mo.hstack([n_trials, n_observers], gap=1),
+                            mo.hstack([n_trials, n_actors], gap=1),
+                            mo.md("**Actor means**"),
                             mo.hstack([sigma0, sigma_scale, lapse], gap=1),
                             mo.hstack([ndt, rt_scale, rt_noise], gap=1),
+                            mo.md("**Sampling variance**"),
+                            mo.hstack([sigma0_sd, sigma_scale_sd, lapse_sd], gap=1),
+                            mo.hstack([ndt_sd, rt_scale_sd, rt_noise_sd], gap=1),
                         ],
                         gap=0.6,
                     ),
@@ -517,24 +578,30 @@ def _(
 def _(
     ExperimentGenerator,
     FIT_DF_COLUMNS,
-    NAfcObserver,
+    PriorPredictiveActor,
+    lapse,
+    lapse_sd,
     make_motion_coherence_trials,
     motion_stimulus_to_strengths,
     lvl1,
     lvl2,
     lvl3,
-    lapse,
     mo,
-    n_observers,
+    n_actors,
     n_trials,
     ndt,
+    ndt_sd,
     np,
     pd,
     rt_noise,
+    rt_noise_sd,
     rt_scale,
+    rt_scale_sd,
     run_sim,
     sigma0,
+    sigma0_sd,
     sigma_scale,
+    sigma_scale_sd,
 ):
     if not run_sim.value:
         df = pd.DataFrame(columns=FIT_DF_COLUMNS)
@@ -543,7 +610,7 @@ def _(
         condition_levels = [max(0.0, float(s.value)) for s in (lvl1, lvl2, lvl3)]
 
         nT = max(10, min(300, int(n_trials.value or 100)))
-        nS = max(1, min(30, int(n_observers.value or 3)))
+        nS = max(1, min(30, int(n_actors.value or 3)))
 
         rng = np.random.default_rng(12345)
 
@@ -557,21 +624,28 @@ def _(
                 )
             )
 
-        def build_observer(_subj: int):
+        def build_actor(_subj: int):
             obs_rng = np.random.default_rng(rng.integers(0, 2**32 - 1))
-            return NAfcObserver(
-                sigma0=float(sigma0.value),
-                sigma_scale=float(sigma_scale.value),
-                lapse_rate=float(lapse.value),
-                rt_scale=float(rt_scale.value),
-                rt_noise=float(rt_noise.value),
+            return PriorPredictiveActor(
+                sigma0_mean=float(sigma0.value),
+                sigma0_sd=float(sigma0_sd.value),
+                sigma_scale_mean=float(sigma_scale.value),
+                sigma_scale_sd=float(sigma_scale_sd.value),
+                lapse_rate_mean=float(lapse.value),
+                lapse_rate_sd=float(lapse_sd.value),
+                ndt_mean=float(ndt.value),
+                ndt_sd=float(ndt_sd.value),
+                rt_scale_mean=float(rt_scale.value),
+                rt_scale_sd=float(rt_scale_sd.value),
+                rt_noise_mean=float(rt_noise.value),
+                rt_noise_sd=float(rt_noise_sd.value),
                 evidence_weight=(1.0, 1.0),
                 stimulus_to_strengths=motion_stimulus_to_strengths,
                 rng=obs_rng,
             )
 
         rows = experiment.simulate(
-            observer_factory=build_observer,
+            actor_factory=build_actor,
             n_subjects=nS,
             ndt=float(ndt.value),
         )

@@ -1,4 +1,4 @@
-# Heuristic virtual n-AFC observer: noisy latent strengths, argmax choice, coherence-scaled RT.
+# Prior-predictive virtual n-AFC actor: noisy latent strengths, argmax choice, coherence-scaled RT.
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-EvidenceModelFn = Callable[["NAfcObserver", np.ndarray, np.ndarray], np.ndarray]
+EvidenceModelFn = Callable[["NAfcActor", np.ndarray, np.ndarray], np.ndarray]
 StimulusToStrengthsFn = Callable[[dict[str, object]], list[float]]
 
 
 @dataclass(frozen=True)
-class NAfcObserver:
-    """Virtual n-AFC observer: ``stimulus_factors`` → ``(choice_index, rt)``."""
+class NAfcActor:
+    """Virtual n-AFC actor: ``stimulus_factors`` → ``(choice_index, rt)``."""
 
     sigma0: float = 0
     sigma_scale: float = 1.0

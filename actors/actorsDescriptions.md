@@ -1,24 +1,24 @@
 # Agent descriptions
 
-Plain-language notes for virtual observers under `observers/`. Each section includes a flowchart aligned with the implementation.
+Plain-language notes for virtual actors under `actors/`. Each section includes a flowchart aligned with the implementation.
 
 ---
 
-## `NAfcObserver` (`heuristic_observer.py`)
+## `NAfcActor` (`prior_predictive_actor.py`)
 
-Virtual n-AFC observer: one trial in, `(choice_index, rt)` out. Choice uses noisy latent evidence; non-lapse RT scales with coherence.
+Virtual n-AFC prior-predictive actor: one trial in, `(choice_index, rt)` out. Choice uses noisy latent evidence; non-lapse RT scales with coherence.
 
 ### Overview
 
 - **Inputs per trial:** `stimulus_factors`, `ndt`
-- **`stimulus_to_strengths`** maps experiment params to latent `stim_strengths` inside the observer
-- **`evidence_weight`** (observer parameter; all ones = no bias) multiplies latent strengths before noise
+- **`stimulus_to_strengths`** maps experiment params to latent `stim_strengths` inside the actor
+- **`evidence_weight`** (actor parameter; all ones = no bias) multiplies latent strengths before noise
 - **Output:** `(choice_index, rt)`
 - Optional **`evidence_model`** hook replaces default latent evidence generation
 
 ### Flowchart
 
-Default path (`evidence_model` is `None`). Matches `choose()` → `_trial()` in `heuristic_observer.py`.
+Default path (`evidence_model` is `None`). Matches `choose()` → `_trial()` in `prior_predictive_actor.py`.
 
 ```mermaid
 flowchart TD
@@ -61,7 +61,7 @@ flowchart TD
 
 - Default per alternative `i`:
   - `evidence[i] = evidence_weight[i] * stim_strengths[i] + Normal(0, sigma)`
-- Custom: `evidence_model(observer, weight_arr, strength_arr)`
+- Custom: `evidence_model(actor, weight_arr, strength_arr)`
 
 ### Decision rule
 
@@ -85,13 +85,34 @@ flowchart TD
 
 ---
 
-## `DdmObserver` (`ssm_ddm_observer.py`)
+## `PriorPredictiveActor` (`prior_predictive_subject_actor.py`)
 
-Forward DDM observer using **ssm-simulators**: strengths → signed drift → one simulator draw → `(choice_index, rt)`.
+Wraps ``NAfcActor``: per subject, draw each control parameter from
+``Normal(mean, sd)`` (SD = 0 fixes at mean), then forward-simulate trials.
+
+### Usage
+
+```python
+from actors.prior_predictive_subject_actor import PriorPredictiveActor
+
+actor = PriorPredictiveActor(
+    sigma_scale_mean=0.9,
+    sigma_scale_sd=0.15,
+    stimulus_to_strengths=motion_stimulus_to_strengths,
+    rng=rng,
+)
+choice_index, rt = actor.choose(stimulus_factors, ndt=0.3)
+```
+
+---
+
+## `DdmActor` (`ssm_actor.py`)
+
+Forward DDM actor using **ssm-simulators**: strengths → signed drift → one simulator draw → `(choice_index, rt)`.
 
 ### Overview
 
-- **Same surface as** `NAfcObserver`: `choose(stimulus_factors, ndt)` and optional `stimulus_to_strengths`
+- **Same surface as** `NAfcActor`: `choose(stimulus_factors, ndt)` and optional `stimulus_to_strengths`
 - **SSM parameters:** `v_intercept`, `v_scale`, `a`, `z` (plus `lapse_rate`, `lapse_rt_extra`)
 - **`ndt` from the experiment** is passed through as DDM non-decision time `t`
 - **Output:** `(choice_index, rt)` with `choice_index` 0 = lower boundary (left), 1 = upper (right)
@@ -122,14 +143,14 @@ flowchart TD
 ### Usage
 
 ```python
-from observers.ssm_ddm_observer import DdmObserver
+from actors.ssm_actor import DdmActor
 
-observer = DdmObserver(
+actor = DdmActor(
     v_scale=2.5,
     a=1.2,
     z=0.5,
     stimulus_to_strengths=motion_stimulus_to_strengths,
     rng=rng,
 )
-choice_index, rt = observer.choose(stimulus_factors, ndt=0.3)
+choice_index, rt = actor.choose(stimulus_factors, ndt=0.3)
 ```

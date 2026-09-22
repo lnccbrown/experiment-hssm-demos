@@ -7,7 +7,7 @@ This project is building a modular experimentation stack for behavioral tasks, c
 At a high level, the system is designed to support:
 
 - **Demo experiments** for interactive teaching and rapid iteration
-- **Simulated experiments** using configurable virtual observers
+- **Simulated experiments** using configurable virtual actors
 - **Participant-facing experiments** using browser-native task execution
 - **Unified analysis outputs** using sequential sampling models (HSSM) and summary plots
 
@@ -17,7 +17,7 @@ The architecture separates concerns so pieces can be swapped without rewriting t
 
 - `schemas/` defines contracts, trial structure, and experiment organization
 - `renderers/` defines stimulus display helpers and preview behavior
-- `observers/` defines observer behavior for synthetic data generation
+- `actors/` defines actor behavior for synthetic data generation
 - `runtime/` executes jsPsych timelines in browser-compatible form
 - `analysis/` holds model fitting and descriptive statistics
 - `experiments/` orchestrates controls, execution flow, and visualization
@@ -31,12 +31,12 @@ The key idea is **interchangeability**:
 
 ## Current Working Flow
 
-See the mermaid pipeline flowchart in [DOCUMENTATION.md](DOCUMENTATION.md#pipeline-flowchart) (trials → Observer vs participant → descriptive summaries → HSSM fit).
+See the mermaid pipeline flowchart in [DOCUMENTATION.md](DOCUMENTATION.md#pipeline-flowchart) (trials → Actor vs participant → descriptive summaries → HSSM fit).
 
 1. User explores live motion previews (coherence A/B/C sliders, adjustable dot lifetime).
 2. User runs the jsPsych demo (intro → countdown → motion trials with feedback → in-iframe result charts); results sync to Python as `demo_df` via `postMessage` + `mo.ui.anywidget`; **Restart demo** rebuilds the iframe.
-3. User configures observer and sampling parameters.
-4. Simulation generates trial-level response/RT data via `NAfcObserver`.
+3. User configures actor and sampling parameters.
+4. Simulation generates trial-level response/RT data via `NAfcActor`.
 5. HSSM fitting is run from dedicated controls.
 6. Model summaries and model-cartoon visualization are shown in-app.
 
@@ -52,7 +52,7 @@ See the mermaid pipeline flowchart in [DOCUMENTATION.md](DOCUMENTATION.md#pipeli
 
 ## Long-Term Direction
 
-Evolve from a single demo into a reusable experiment framework where task templates, observers, rendering strategies, and analysis modules can be composed quickly for new paradigms.
+Evolve from a single demo into a reusable experiment framework where task templates, actors, rendering strategies, and analysis modules can be composed quickly for new paradigms.
 
 ## Immediate TODO
 
@@ -61,21 +61,21 @@ Evolve from a single demo into a reusable experiment framework where task templa
 - Implement persistent run-state management in the app (simulation complete, fit complete, last dataset) so workflows are explicit and recoverable.
 - Use `demo_df` alongside simulated `df` in analysis cells (shared `motion_coherence_export` / `FIT_DF_COLUMNS` schema). **Done:** HSSM section radio selects Simulation vs Demo.
 - Expand `analysis/` with reusable report builders (summary tables + standard plots) independent of any single task.
-- Add validation tests for `observers/heuristic_observer.py`, `schemas/trial_generator.py`, and `analysis/descriptive_stats.py` to lock in expected behavior.
+- Add validation tests for `actors/prior_predictive_actor.py`, `schemas/trial_generator.py`, and `analysis/descriptive_stats.py` to lock in expected behavior.
 - Add a second task prototype (non-motion or multi-choice variant) to verify interchangeability claims in practice.
 - Provide environment profile docs/scripts for reproducible setup across Linux variants (system deps + Python/uv workflow).
 - Add lightweight CI checks (import/syntax/tests) so modular refactors stay safe as components grow.
 - Create a configurable app shell in `experiments/` so multiple demos/tasks can share common controls, run buttons, and plotting layout.
 
-## Current Observer Notes
+## Current Actor Notes
 
-The evidence observer path is anchored on an evidence-based decision rule with explicit separations between latent evidence generation, lapse behavior, and RT construction.
+The evidence actor path is anchored on an evidence-based decision rule with explicit separations between latent evidence generation, lapse behavior, and RT construction.
 
-- Trial encoding for binary motion: `motion_stimulus_to_strengths` in `coherence_demo/coherence_demo.py` maps experiment params to observer latent strengths.
-- `evidence_weight=(1,1)` on the observer means no directional bias.
+- Trial encoding for binary motion: `motion_stimulus_to_strengths` in `coherence_demo/coherence_demo.py` maps experiment params to actor latent strengths.
+- `evidence_weight=(1,1)` on the actor means no directional bias.
 - Sensory noise is difficulty-scaled in the default evidence model (`coherence = max(stim_strengths)`, noise uses `1 - coherence`).
-- Observer noise is parameterized by `sigma0` (noise floor) and `sigma_scale` (difficulty slope).
-- The observer supports an optional custom signal-model hook so both decisions and non-lapse RTs can share a custom latent signal.
+- Actor noise is parameterized by `sigma0` (noise floor) and `sigma_scale` (difficulty slope).
+- The actor supports an optional custom signal-model hook so both decisions and non-lapse RTs can share a custom latent signal.
 - Non-lapse RT uses `ndt + rt_scale / evidence` with additive Gaussian noise; at very low evidence, RT can become large.
 
 This behavior is currently useful for exploratory simulation and model-shape intuition, with a known trade-off around low-evidence RT tails.
@@ -103,7 +103,7 @@ Trial generation architecture:
 
 - Generic `Trial` contract: `stimulus_factors` + `display_params` + presentation timing only (no latent evidence on trial).
 - `TrialGenerator` / `FactorTrialGenerator` build and iterate trial blocks; `ExperimentGenerator` holds experiment params (display defaults, data output path) and multiple trial-generator blocks.
-- Observer hyperparameters (`sigma0`, lapse, RT scale, …) remain on `NAfcObserver` only.
+- Actor hyperparameters (`sigma0`, lapse, RT scale, …) remain on `NAfcActor` only.
 
 Recent alignment with this model:
 

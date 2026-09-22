@@ -10,17 +10,17 @@ It supports:
 - synthetic and participant-facing data collection flows
 - downstream sequential-sampling analysis and visualization
 
-The design favors interchangeable components so task logic, stimulus delivery, and observer/input sources can evolve without rewriting the full stack.
+The design favors interchangeable components so task logic, stimulus delivery, and actor/input sources can evolve without rewriting the full stack.
 
 ## Pipeline flowchart
 
-End-to-end flow for the coherence marimo app (`experiments/coherence_demo/coherence_demo.py`). Trials are built once; **response collection** swaps a simulated **Observer** for a human participant; **analysis** (`analysis/hssm_pipeline.py`) summarizes the simulated DataFrame and optionally fits HSSM. Step-by-step detail is in [Runtime Flow](#runtime-flow).
+End-to-end flow for the coherence marimo app (`experiments/coherence_demo/coherence_demo.py`). Trials are built once; **response collection** swaps a simulated **Actor** for a human participant; **analysis** (`analysis/hssm_pipeline.py`) summarizes the simulated DataFrame and optionally fits HSSM. Step-by-step detail is in [Runtime Flow](#runtime-flow).
 
 ```mermaid
 flowchart TB
   subgraph UI["experiments/coherence_demo/coherence_demo.py (marimo)"]
     sliders["Coherence sliders, dot lifetime,\ntrials / participants"]
-    simCtrl["Observer settings\nσ₀, σ scale, lapse, NDT, RT params"]
+    simCtrl["Actor settings\nσ₀, σ scale, lapse, NDT, RT params"]
     runSim["Run simulation"]
     runFit["Run HSSM fit"]
   end
@@ -31,7 +31,7 @@ flowchart TB
 
   subgraph Resp["Response collection"]
     direction{"Response source?"}
-    observerBB["Observer\n(stimulus_factors, ndt) → choice, rt"]
+    actorBB["Actor\n(stimulus_factors, ndt) → choice, rt"]
     participant["Participant\n(display_params → stimulus,\nhuman choice + rt)"]
   end
 
@@ -44,11 +44,11 @@ flowchart TB
 
   sliders --> makeTrials --> expGen --> trial
   trial --> direction
-  direction -->|simulated| observerBB
+  direction -->|simulated| actorBB
   direction -->|participant| participant
-  simCtrl --> observerBB
-  runSim --> observerBB
-  observerBB --> df
+  simCtrl --> actorBB
+  runSim --> actorBB
+  actorBB --> df
   participant -->|"postMessage rows_json"| df
   df --> summarize
   df --> hssm
@@ -58,9 +58,9 @@ flowchart TB
 
 After **Run simulation**, marimo builds `df` and renders `summarize_behavior` plots. **Run HSSM fit** is a separate control that calls `fit_hssm_model` then `summarize_posterior` (and the model cartoon).
 
-The **Observer** node is a black box in this view. The diagram below is the same stage opened up: simulated path implements the box in Python (`observers/heuristic_observer.py`); the participant path replaces it with browser presentation plus human input.
+The **Actor** node is a black box in this view. The diagram below is the same stage opened up: simulated path implements the box in Python (`actors/prior_predictive_actor.py`); the participant path replaces it with browser presentation plus human input.
 
-### Observer: simulated vs participant
+### Actor: simulated vs participant
 
 ```mermaid
 flowchart TB
@@ -69,11 +69,11 @@ flowchart TB
   direction{"Response source?"}
   trial --> direction
 
-  subgraph Sim["Simulated — Observer black box"]
+  subgraph Sim["Simulated — Actor black box"]
     direction -->|simulated| stimHook["stimulus_to_strengths\n(swap per task)"]
     stimHook --> defaultMap["default:\nmotion_stimulus_to_strengths"]
     defaultMap --> strengths["latent stim_strengths"]
-    strengths --> choose["Observer.choose()\n(NAfcObserver)"]
+    strengths --> choose["Actor.choose()\n(NAfcActor)"]
     choose --> evidenceHook["evidence_model\n(swap)"]
     evidenceHook --> defaultEV["default:\n_default_evidence_model"]
     evidenceHook -.->|optional| customEV["custom evidence_model"]
@@ -94,20 +94,20 @@ flowchart TB
   end
 ```
 
-**Simulated Observer — swappable hooks** (each arrow targets the **default** box used in this repo):
+**Simulated Actor — swappable hooks** (each arrow targets the **default** box used in this repo):
 
 | Hook | Default (in diagram) | Typical swap |
 |------|----------------------|--------------|
-| `stimulus_to_strengths` | `motion_stimulus_to_strengths` | Another per-task mapper in `coherence_demo/coherence_demo.py` or at `NAfcObserver` construction |
-| `evidence_model` | `_default_evidence_model` | Custom `Callable` on `NAfcObserver` |
-| Observer class | `NAfcObserver` | Another class under `observers/` with the same `(factors, ndt) → (choice, rt)` surface |
+| `stimulus_to_strengths` | `motion_stimulus_to_strengths` | Another per-task mapper in `coherence_demo/coherence_demo.py` or at `NAfcActor` construction |
+| `evidence_model` | `_default_evidence_model` | Custom `Callable` on `NAfcActor` |
+| Actor class | `NAfcActor` | Another class under `actors/` with the same `(factors, ndt) → (choice, rt)` surface |
 | Presentation (participant) | `constant_stimuli_afc_timeline` + `motion_rdk` stimulus plugin | Other `AFCStimulusPlugin` + `renderers/` HTML |
 
-**Tuned on `NAfcObserver` but fixed policy** (not plug-in hooks): `sigma0`, `sigma_scale`, `lapse_rate`, `evidence_weight`, `rt_scale`, `rt_noise`. Decision and RT rules inside `choose()` stay unless you replace the agent class.
+**Tuned on `NAfcActor` but fixed policy** (not plug-in hooks): `sigma0`, `sigma_scale`, `lapse_rate`, `evidence_weight`, `rt_scale`, `rt_noise`. Decision and RT rules inside `choose()` stay unless you replace the agent class.
 
-**Participant path** — swap the presentation hook; the **default** motion stack is shown in the diagram. The human is the decision maker. Only `display_params` (and jsPsych metadata) affect what they see; `stimulus_factors` are mirrored in logging/scoring, not fed to `NAfcObserver`.
+**Participant path** — swap the presentation hook; the **default** motion stack is shown in the diagram. The human is the decision maker. Only `display_params` (and jsPsych metadata) affect what they see; `stimulus_factors` are mirrored in logging/scoring, not fed to `NAfcActor`.
 
-Internal decision/RT steps for the default simulated Observer are diagrammed in [`observers/observersDescriptions.md`](observers/observersDescriptions.md).
+Internal decision/RT steps for the default simulated Actor are diagrammed in [`actors/actorsDescriptions.md`](actors/actorsDescriptions.md).
 
 ## Directory Map
 
@@ -131,9 +131,9 @@ Current structure:
     - `motion_coherence_stimulus.py` - Python HTML helpers for jsPsych trials and marimo previews
     - `motion_coherence.js` - canvas animator + DOM helper (`MotionCoherence`, `__startAllMotionCanvases`)
     - `motion_coherence.css` - layout for stimulus wrapper and canvas
-- `observers/`
-  - `heuristic_observer.py` - virtual observer behavior models
-  - `observersDescriptions.md` - notes and flowcharts for each agent (`NAfcObserver` decision and RT rules)
+- `actors/`
+  - `prior_predictive_actor.py` - virtual actor behavior models
+  - `actorsDescriptions.md` - notes and flowcharts for each agent (`NAfcActor` decision and RT rules)
 - `runtime/`
   - `jspsych_runner.py` - `RunnerConfig` + HTML assembly (timeline/config base64 injection)
   - `jspsych_plugins.py` - jsPsych CDN plugin registry
@@ -161,10 +161,10 @@ Role:
 
 - assembles the end-to-end interactive workflow in marimo
 - includes an interactive participant-like demo block above simulation controls (iframe + `demo_df` export)
-- exposes UI controls for coherence levels, dot lifetime, trials/participants, and observer parameters
+- exposes UI controls for coherence levels, dot lifetime, trials/participants, and actor parameters
 - uses separate run controls for simulation and HSSM fit
 - renders task previews in the notebook UI
-- runs data simulation loops using trial and observer modules
+- runs data simulation loops using trial and actor modules
 - executes HSSM model fitting and displays summaries/charts including an HSSM model cartoon plot
 
 Motion display settings for this app only (not shared defaults elsewhere):
@@ -178,7 +178,7 @@ Motion display settings and motion-specific trial sampling (`make_motion_coheren
 Key integration boundaries:
 
 - imports trial builders from `schemas/`
-- imports observer behavior from `observers/`
+- imports actor behavior from `actors/`
 - imports preview rendering helpers from `renderers/`
 - imports model-fit utilities from `analysis/`
 - keeps orchestration separate from implementation modules
@@ -232,18 +232,18 @@ Role:
 - demo coherence levels come from marimo sliders (A/B/C)
 - `coherence_runner_config()` enables in-iframe result charts and loads `motion_coherence.js` + CSS
 
-### `observers/heuristic_observer.py`
+### `actors/prior_predictive_actor.py`
 
 Role:
 
-- contains virtual observer classes for synthetic behavioral data
+- contains virtual actor classes for synthetic behavioral data
 - models response policy, sensory uncertainty behavior, and lapse/random errors
-- can be expanded to host multiple observer families (simple heuristics, SSM-consistent agents, etc.)
+- can be expanded to host multiple actor families (simple prior predictives, SSM-consistent agents, etc.)
 
-Current `NAfcObserver` behavior:
+Current `NAfcActor` behavior:
 
 - Accepts experiment ``stimulus_factors``; derives latent ``stim_strengths`` via ``stimulus_to_strengths``.
-- ``evidence_weight`` is an observer parameter (default all ones = no directional bias).
+- ``evidence_weight`` is an actor parameter (default all ones = no directional bias).
 - Latent evidence defaults to `evidence_weight * stim_strengths + Gaussian noise`.
 - Sensory noise uses `sigma = sigma0 + sigma_scale * c` where `c` is driven by task difficulty (`1 - coherence`, `coherence = max(stim_strengths)`).
 - Lapse path is explicit: with probability `lapse_rate`, choice is random and RT is generated from lapse RT logic.
@@ -274,7 +274,7 @@ Canvas elements use explicit pixel width/height (no responsive scaling) so speed
 
 Why it exists:
 
-- visual preview logic should not live inside trial-generation or observer classes
+- visual preview logic should not live inside trial-generation or actor classes
 - allows changing rendering implementation (Canvas, jsPsych plugin views, media assets) without changing trial or analysis code
 
 ### `runtime/jspsych_export.py`
@@ -429,9 +429,9 @@ Role:
 
 ### Python simulation + HSSM
 
-1. marimo UI collects task and observer parameters.
+1. marimo UI collects task and actor parameters.
 2. Per condition level, `make_motion_coherence_trials()` returns a `FactorTrialGenerator` block; blocks are attached to an `ExperimentGenerator`, which serves trials with merged experiment `display_params` / `data_output_path` when set.
-3. `NAfcObserver.choose(stimulus_factors)` builds latent evidence, choice, and RT (explicit lapse path).
+3. `NAfcActor.choose(stimulus_factors)` builds latent evidence, choice, and RT (explicit lapse path).
 4. tabular data is assembled for modeling.
 5. user triggers HSSM fit with dedicated run control.
 6. summaries and charts are rendered in-app (including model cartoon).
@@ -442,7 +442,7 @@ Use these boundaries when adding new functionality:
 
 - **New task types**: add simulator classes/functions under `schemas/`
 - **New stimuli modalities**: add preview/render helpers under `renderers/`
-- **New observer/input sources**: add classes under `observers/` and keep choice/RT coupled to the same latent signal model when possible
+- **New actor/input sources**: add classes under `actors/` and keep choice/RT coupled to the same latent signal model when possible
 - **New analysis models**: add model-specific fit/plot helpers under `analysis/`
 
 Prefer data contracts (plain dict/dataframe schemas) between modules over direct cross-calls to keep components interchangeable.
@@ -476,4 +476,4 @@ Any new task module should document equivalent fields and provide a normalizatio
 
 ## Packaging Notes
 
-The project follows a split-by-concern layout (`schemas/`, `renderers/`, `observers/`, `analysis/`) with `experiments/` housing marimo entrypoints.
+The project follows a split-by-concern layout (`schemas/`, `renderers/`, `actors/`, `analysis/`) with `experiments/` housing marimo entrypoints.

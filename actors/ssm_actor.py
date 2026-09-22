@@ -1,4 +1,4 @@
-# Forward DDM observer via ssm-simulators: stimulus strengths → signed drift → (choice, RT).
+# Forward DDM actor via ssm-simulators: stimulus strengths → signed drift → (choice, RT).
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ StimulusToStrengthsFn = Callable[[dict[str, object]], list[float]]
 
 
 @dataclass(frozen=True)
-class DdmObserver:
-    """Virtual 2AFC observer driven by a forward DDM simulation.
+class DdmActor:
+    """Virtual 2AFC actor driven by a forward DDM simulation.
 
     Maps latent alternative strengths to a signed drift rate, runs one draw from
     ``ssms.basic_simulators.simulator`` (model ``ddm``), and returns

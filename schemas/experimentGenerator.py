@@ -1,6 +1,6 @@
 # Experiment-level orchestration: params, ordered trial-generator blocks, and simulation.
 # Merges shared ``display_params`` into each trial and exposes ``all_trials()`` / ``simulate()``.
-# Used by marimo demos and any Python-side batch observer runs.
+# Used by marimo demos and any Python-side batch actor runs.
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from schemas.contracts import ExperimentParams, Trial
 from schemas.trial_generator import TrialGenerator
 
 
-class ObserverLike(Protocol):
+class ActorLike(Protocol):
     def choose(self, stimulus_factors: dict[str, object], ndt: float) -> tuple[int, float]: ...
 
 
@@ -81,17 +81,17 @@ class ExperimentGenerator:
     def simulate(
         self,
         *,
-        observer_factory: Callable[[int], ObserverLike],
+        actor_factory: Callable[[int], ActorLike],
         n_subjects: int,
         ndt: float,
         response_mapper: Callable[[int], int] | None = None,
     ) -> list[dict[str, object]]:
-        """Run the experiment with simulated observers and return row records.
+        """Run the experiment with simulated actors and return row records.
 
         Args:
-            observer_factory: Builds one observer per subject.
+            actor_factory: Builds one actor per subject.
             n_subjects: Number of simulated subjects.
-            ndt: Non-decision time passed into ``observer.choose``.
+            ndt: Non-decision time passed into ``actor.choose``.
             response_mapper: Optional mapping from ``choice_index`` to output response code.
         """
         subjects = max(0, int(n_subjects))
@@ -99,11 +99,11 @@ class ExperimentGenerator:
         trials = self.all_trials()
 
         for subj in range(subjects):
-            observer = observer_factory(subj)
+            actor = actor_factory(subj)
             for tr in trials:
                 trial_data = dict(tr.get("data") or {})
                 stim_factors = dict(tr.get("stimulus_factors") or {})
-                choice_index, rt = observer.choose(stim_factors, ndt=float(ndt))
+                choice_index, rt = actor.choose(stim_factors, ndt=float(ndt))
                 choice_idx = int(choice_index)
                 correct_index = int(tr["correct_index"])
                 if response_mapper is None:
