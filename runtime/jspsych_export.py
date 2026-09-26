@@ -67,7 +67,10 @@ export default {{
 
     const onMessage = (event) => {{
       const payload = event.data;
-      if (!payload || payload.type !== "{message_type}") return;
+      if (!payload || payload.type !== {message_type}) return;
+      if (payload.session_id !== {session_id}) return;
+      const frame = document.getElementById({iframe_id});
+      if (!frame || event.source !== frame.contentWindow) return;
       if (typeof payload.rows_json !== "string") {{
         throw new Error(
           "jspsych-results message must include rows_json from JsPsychRunnerCore",
@@ -83,13 +86,26 @@ export default {{
 """
 
 
-def _bridge_esm(*, message_type: str = DEFAULT_MESSAGE_TYPE) -> str:
-    return _BRIDGE_ESM_TEMPLATE.format(message_type=message_type)
+def _bridge_esm(
+    *,
+    message_type: str = DEFAULT_MESSAGE_TYPE,
+    session_id: str | None = None,
+    iframe_id: str | None = None,
+) -> str:
+    if session_id is None or iframe_id is None:
+        raise ValueError("session_id and iframe_id are required for a source-bound results bridge")
+    return _BRIDGE_ESM_TEMPLATE.format(
+        message_type=json.dumps(message_type),
+        session_id=json.dumps(session_id),
+        iframe_id=json.dumps(iframe_id),
+    )
 
 
 def create_jspsych_marimo_bridge(
     *,
     message_type: str = DEFAULT_MESSAGE_TYPE,
+    session_id: str,
+    iframe_id: str,
 ):
     """Return a hidden marimo UI element that syncs iframe ``rows_json`` to Python."""
     import anywidget
@@ -97,7 +113,7 @@ def create_jspsych_marimo_bridge(
     import marimo as mo
 
     class JsPsychMarimoBridge(anywidget.AnyWidget):
-        _esm = _bridge_esm(message_type=message_type)
+        _esm = _bridge_esm(message_type=message_type, session_id=session_id, iframe_id=iframe_id)
         rows_json = traitlets.Unicode("[]").tag(sync=True)
 
     return mo.ui.anywidget(JsPsychMarimoBridge())

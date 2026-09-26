@@ -58,7 +58,7 @@ FEEDBACK_TRIAL: dict[str, object] = {
 }
 
 
-def coherence_runner_config(*, title: str = "jsPsych Demo") -> RunnerConfig:
+def coherence_runner_config(*, title: str = "jsPsych Demo", session_id: str | None = None) -> RunnerConfig:
     """Runner settings for the coherence demo iframe."""
     return RunnerConfig(
         title=title,
@@ -69,6 +69,7 @@ def coherence_runner_config(*, title: str = "jsPsych Demo") -> RunnerConfig:
         ),
         extra_styles=("renderers/motion_coherence/motion_coherence.css",),
         input_arrow_keys=True,
+        results_session_id=session_id,
         show_results_charts=True,
         results_task_filter="motion_coherence",
     )

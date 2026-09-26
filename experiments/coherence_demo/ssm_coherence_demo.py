@@ -317,7 +317,11 @@ def _(
     coherence_runner_config,
     render_srcdoc_iframe,
 ):
+    import secrets as _secrets
+
     _ = demo_restart.value
+    demo_session_id = _secrets.token_urlsafe(18)
+    demo_iframe_id = f"coherence-demo-{demo_session_id}"
     _lifetime = max(0.01, float(dot_lifetime_s.value or 0.1))
     a = max(0.0, min(1.0, float(lvl1.value)))
     b = max(0.0, min(1.0, float(lvl2.value)))
@@ -341,10 +345,12 @@ def _(
     )
     demo_html = build_jspsych_runner_html(
         demo_timeline,
-        config=coherence_runner_config(title="Motion coherence demo"),
+        config=coherence_runner_config(title="Motion coherence demo", session_id=demo_session_id),
     )
     demo_iframe = mo.Html(
-        render_srcdoc_iframe(demo_html, title="Motion coherence demo", height=520)
+        render_srcdoc_iframe(
+            demo_html, title="Motion coherence demo", height=520, iframe_id=demo_iframe_id
+        )
     )
     mo.vstack(
         [
@@ -361,12 +367,14 @@ def _(
         ],
         gap=0.5,
     )
-    return
+    return demo_iframe_id, demo_session_id
 
 
 @app.cell
-def _(create_jspsych_marimo_bridge):
-    demo_results = create_jspsych_marimo_bridge()
+def _(create_jspsych_marimo_bridge, demo_iframe_id, demo_session_id):
+    demo_results = create_jspsych_marimo_bridge(
+        session_id=demo_session_id, iframe_id=demo_iframe_id
+    )
     demo_results
     return demo_results,
 
@@ -771,14 +779,14 @@ def _(fit_df, idata, mo, model):
 
     import hssm.plotting as _hplot
     _idata_pp = model.sample_posterior_predictive(
-        idata=idata,
+        dt=idata,
         inplace=False,
         include_group_specific=False,
         kind="response",
     )
     _ax_or_grid = _hplot.plot_model_cartoon(
         model,
-        idata=_idata_pp,
+        dt=_idata_pp,
         data=fit_df,
         predictive_group="posterior_predictive",
         plot_data=True,
