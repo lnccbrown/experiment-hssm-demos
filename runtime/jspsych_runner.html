@@ -4,8 +4,9 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>__TITLE_SAFE__</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link href="__JSPSYCH_CORE_CSS__" rel="stylesheet" />
-  <script src="__JSPSYCH_CORE_JS__"></script>
+  <script defer crossorigin="anonymous" src="__JSPSYCH_CORE_JS__"></script>
 __VEGA_SCRIPT_TAGS__
 __PLUGIN_SCRIPT_TAGS__
   <style>
@@ -14,7 +15,7 @@ __EXTRA_STYLE_BLOCKS__
   </style>
 </head>
 <body>
-  <div id="jspsych-target"></div>
+  <div id="jspsych-target"><div class="runner-loading" role="status">Loading task…</div></div>
   <script>
 __RUNNER_CORE_JS__
   </script>

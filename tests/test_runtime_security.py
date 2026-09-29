@@ -23,6 +23,7 @@ def test_results_bridge_requires_matching_nonce_and_iframe_source():
     assert 'payload.session_id !== "nonce-123"' in source
     assert 'document.getElementById("pst-frame")' in source
     assert "event.source !== frame.contentWindow" in source
+    assert 'model.set("result_received", true)' in source
 
 
 def test_runner_carries_session_nonce_in_encoded_config():
@@ -31,3 +32,8 @@ def test_runner_carries_session_nonce_in_encoded_config():
     assert encoded is not None
     config = json.loads(base64.b64decode(encoded.group(1)))
     assert config["results_session_id"] == "nonce-456"
+    assert 'rel="preconnect" href="https://cdn.jsdelivr.net"' in html
+    assert html.count('rel="preload" as="script"') == 3
+    assert html.count('<script defer crossorigin="anonymous" src=') == 3
+    assert 'class="runner-loading"' in html
+    assert 'document.addEventListener("DOMContentLoaded", boot' in html

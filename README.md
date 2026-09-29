@@ -40,6 +40,12 @@ The app starts with a quick 30–60-choice learning game and no final round. Sel
 restore the original demo schedule of 120–240 learning choices; the optional all-pairs final round
 can be enabled independently.
 
+**Probabilistic Approach-Avoidance Task** (a pedagogical PAAT based on Cheng et al. 2026): play a count-matched synthetic design, simulate the stock `angle` model, fit its HSSM drift regression, and inspect support- and deadline-aware checks:
+
+```bash
+uv run marimo run experiments/paat_demo/paat_app.py
+```
+
 ### Tests
 
 ```bash
@@ -57,3 +63,4 @@ uv run pytest -m slow    # computationally intensive real HSSM fits
 
 - Detailed file/directory responsibilities: `DOCUMENTATION.md`
 - PST app design, decisions and validation results: `PST_PLAN.md`
+- PAAT scientific contract, design limitations and validation gate: `PAAT_PLAN.md`
