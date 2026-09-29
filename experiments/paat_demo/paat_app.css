@@ -1,0 +1,163 @@
+/* Marimo layout for the PAAT → ssm-simulators → HSSM walkthrough. */
+
+.paat-hero {
+  padding: 1.45rem 1.6rem 1.25rem;
+  border: 1px solid rgba(49, 95, 115, 0.24);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(67, 166, 111, 0.09), rgba(217, 104, 104, 0.08));
+}
+
+.paat-hero h1 {
+  margin: 0.1rem 0 0.45rem;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.paat-hero p {
+  max-width: 48rem;
+  margin: 0.3rem 0;
+  line-height: 1.55;
+}
+
+.paat-hero__logo {
+  float: right;
+  height: 46px;
+  margin-left: 1rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.paat-hero__path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+}
+
+.paat-hero__path a {
+  padding: 0.3rem 0.72rem;
+  border: 1px solid rgba(49, 95, 115, 0.3);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.paat-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-top: 1.7rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid rgba(100, 116, 139, 0.25);
+  scroll-margin-top: 1rem;
+}
+
+.paat-step__number {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  background: #315f73;
+  color: #fff;
+  font-weight: 750;
+}
+
+.paat-step h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.paat-step p {
+  margin: 0.18rem 0 0;
+  opacity: 0.75;
+}
+
+.paat-note {
+  box-sizing: border-box;
+  max-width: 52rem;
+  padding: 0.58rem 0.85rem;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-left: 3px solid var(--note-color, #315f73);
+  border-radius: 8px;
+  background: rgba(49, 95, 115, 0.055);
+  font-size: 0.92rem;
+  line-height: 1.48;
+}
+
+.paat-note--empty { border-style: dashed; background: transparent; opacity: 0.84; }
+.paat-note--warn { --note-color: #b45309; background: rgba(180, 83, 9, 0.06); }
+.paat-note--danger { --note-color: #b91c1c; background: rgba(185, 28, 28, 0.06); }
+.paat-note--success { --note-color: #15803d; background: rgba(21, 128, 61, 0.06); }
+.paat-note__label { color: var(--note-color, #315f73); font-weight: 750; }
+
+.paat-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 0.6rem;
+}
+
+.paat-stat {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-radius: 12px;
+  background: rgba(100, 116, 139, 0.05);
+}
+
+.paat-stat__label { font-size: 0.8rem; opacity: 0.7; }
+.paat-stat__value { margin-top: 0.08rem; font-size: 1.42rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.paat-stat__caption { margin-top: 0.08rem; font-size: 0.77rem; opacity: 0.62; }
+
+.paat-model-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.45rem;
+}
+
+.paat-model-strip > div {
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(49, 95, 115, 0.07);
+  text-align: center;
+  font-size: 0.88rem;
+}
+
+.paat-table-wrap { overflow-x: auto; }
+
+[role="tablist"] {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+[role="tablist"]::-webkit-scrollbar { display: none; }
+[role="tab"] { flex: 0 0 auto; }
+
+.paat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.paat-table th,
+.paat-table td {
+  padding: 0.45rem 0.58rem;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.24);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.paat-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.paat-ok { color: #15803d; font-weight: 750; }
+.paat-miss { color: #b91c1c; font-weight: 750; }
+
+.paat-figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}

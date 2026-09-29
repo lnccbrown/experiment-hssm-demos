@@ -120,6 +120,11 @@ Current structure:
     - `motion_stimulus_plugin.py` - registers `motion_rdk` `AFCStimulusPlugin` for constant-stimuli presentation
     - `motion_coherence_export.py` - task adapter: jsPsych rows → motion `DataFrame` for HSSM/simulation
     - `coherence_demo.css` - marimo UI styles for the demonstration
+  - `paat_demo/` - guided PAAT play → explore → simulate → fit → check notebook
+    - `paat_app.py` - Marimo orchestration and explicit scientific guards
+    - `paat_timeline.py` - jsPsych instructions, choices, outcome animations, and breaks
+    - `paat_export.py` - exact schedule/session-bound browser export validation
+    - `paat_app.css` - PAAT notebook layout
 - `schemas/`
   - `contracts.py` - shared typed contracts (`ExperimentParams`, `Trial`, result message types)
   - `trial_generator.py` - abstract `TrialGenerator` and `FactorTrialGenerator`
@@ -131,6 +136,9 @@ Current structure:
     - `motion_coherence_stimulus.py` - Python HTML helpers for jsPsych trials and marimo previews
     - `motion_coherence.js` - canvas animator + DOM helper (`MotionCoherence`, `__startAllMotionCanvases`)
     - `motion_coherence.css` - layout for stimulus wrapper and canvas
+  - `paat_wheels/` - reward/aversive wheel markup, styles, and browser controller
+- `observers/`
+  - `paat_ssm.py` - task-regression mapping and stock `ssm-simulators` angle simulation
 - `actors/`
   - `prior_predictive_actor.py` - virtual actor behavior models
   - `actorsDescriptions.md` - notes and flowcharts for each agent (`NAfcActor` decision and RT rules)
@@ -147,6 +155,7 @@ Current structure:
 - `analysis/`
   - `hssm_pipeline.py` - fit/summarize helpers for HSSM analyses
   - `descriptive_stats.py` - d-prime and standard error descriptive statistics helpers
+  - `paat_analysis.py`, `paat_fit.py`, `paat_plots.py` - support-aware PAAT summaries, stock HSSM angle fitting, diagnostics, and plots
 - `README.md` - quickstart and run instructions
 - `DOCUMENTATION.md` - this architecture guide
 - `pyproject.toml` - project metadata and dependencies
@@ -283,7 +292,7 @@ Role:
 
 - **Task-agnostic** jsPsych participant export for marimo apps
 - `flatten_jspsych_row`, `parse_rows_json`, `jspsych_rows_to_dataframe(include_row, row_to_record, columns)`
-- `create_jspsych_marimo_bridge()` — `mo.ui.anywidget` listener for iframe `rows_json` (`DEFAULT_MESSAGE_TYPE`)
+- `create_jspsych_marimo_bridge()` — source-bound `mo.ui.anywidget` listener for iframe `rows_json`; requires the result nonce and exact iframe ID, and exposes `result_received`
 
 Task-specific filters and record mappers live under `experiments/<task>/` (e.g. `motion_coherence_export.py`).
 
@@ -318,8 +327,8 @@ sequenceDiagram
 
   Iframe->>Core: on_finish experiment
   Core->>Core: rows_json = jsPsych.data.get().json()
-  Core->>Bridge: postMessage type jspsych-results rows_json
-  Bridge->>Marimo: mo.ui.anywidget syncs rows_json trait
+  Core->>Bridge: postMessage type, session_id, rows_json
+  Bridge->>Marimo: source check + sync rows_json/result_received
   Marimo->>Py: motion_trials_dataframe(rows_json)
   Py->>Marimo: demo_df
 ```
@@ -331,7 +340,11 @@ On experiment end, use jsPsych’s **`.json()`** export and post that string to 
 ```javascript
 const rowsJson = jsPsych.data.get().json();
 window.parent.postMessage(
-  { type: "jspsych-results", rows_json: rowsJson },
+  {
+    type: "jspsych-results",
+    rows_json: rowsJson,
+    session_id: config.results_session_id,
+  },
   "*",
 );
 ```
@@ -343,10 +356,13 @@ window.parent.postMessage(
 ```python
 from runtime.jspsych_export import create_jspsych_marimo_bridge
 
-demo_results = create_jspsych_marimo_bridge()
+demo_results = create_jspsych_marimo_bridge(
+    session_id=demo_session_id,
+    iframe_id=demo_iframe_id,
+)
 ```
 
-`create_jspsych_marimo_bridge()` returns **`mo.ui.anywidget(...)`** so trait updates re-run downstream cells. The widget listens for `postMessage` and syncs `rows_json`. Read data only in **downstream** cells.
+`create_jspsych_marimo_bridge()` returns **`mo.ui.anywidget(...)`** so trait updates re-run downstream cells. The widget accepts a message only when its type and session nonce match and `event.source` is the exact sandboxed iframe window. It syncs `rows_json` and sets `result_received = true`; adapters can distinguish an unfinished session from a completed empty export. Read data only in **downstream** cells.
 
 **Marimo layout rule:** the cell that builds the demo **iframe must not** depend on `demo_results`. Otherwise, when export updates, marimo re-runs the iframe cell and the demo restarts at the intro screen.
 
@@ -424,8 +440,8 @@ Role:
 5. After intro, a 3-second countdown runs; then motion trials call `__startAllMotionCanvases` on `on_load`.
 6. Scoring uses `__jsPsychInstance` on `on_finish`; feedback trials follow each motion trial.
 7. On experiment end, in-iframe Vega-Lite charts summarize accuracy and mean RT by coherence (`demo_results_charts.js`).
-8. Runner posts `{ type: "jspsych-results", session_id, rows_json }` to the parent page (`jspsych_runner_core.js`).
-9. `create_jspsych_marimo_bridge()` accepts only the matching session nonce and iframe window; a downstream marimo cell builds `demo_df` via `motion_trials_dataframe`.
+8. Runner posts `{ type: "jspsych-results", rows_json, session_id }` to the parent page (`jspsych_runner_core.js`).
+9. `create_jspsych_marimo_bridge()` verifies the nonce and iframe source, then syncs `rows_json` and `result_received`; a downstream marimo cell builds `demo_df` via `motion_trials_dataframe`.
 
 ### Python simulation + HSSM
 
@@ -484,6 +500,29 @@ The model equations follow Pedersen, Frank & Biele (2017), while task length, pr
 **Dependencies.** The declared API floors are HSSM ≥ 0.4 and ssm-simulators ≥ 0.13.2. The 2026-09-29 lock resolves the current releases, HSSM 0.5.0 and ssm-simulators 0.14.0; the fast suite is also exercised in an isolated environment at both declared floors. No range was broadened during consolidation. HSSM's built-in DDM LAN artifact is downloaded from Hugging Face on first use if it is not cached.
 
 **Tests.** `uv run pytest` runs fast Python and browser-script checks. `uv run pytest -m slow` runs real single-participant and hierarchical HSSM fits plus native PPC, and is intentionally computationally intensive. `uv run marimo check --strict experiments/pst_demo/pst_app.py` validates the reactive graph.
+
+## Probabilistic Approach-Avoidance Task (PAAT) demo
+
+`experiments/paat_demo/paat_app.py` is a guided Play → Explore → Simulate → Fit → Check notebook based on Cheng et al. (2026). Its `conference` profile is a 24-trial teaching design. The two 96-trial profiles match paper/OSF congruency totals but use synthetic evidence schedules; they are not canonical replications.
+
+| Layer | Module | Role |
+|---|---|---|
+| Task | `schemas/tasks/paat.py` | Seeded probability schedules, side balancing, pre-drawn wheel/outcome randomness, response coding, and one frozen predictor scale shared across profiles and participants. |
+| Browser | `renderers/paat_wheels/`, `experiments/paat_demo/paat_timeline.py` | Reward/aversive wheels, keyboard/click choice, fixed deadline, neutral public aversive placeholder, and deterministic outcome playback. |
+| Export | `experiments/paat_demo/paat_export.py` | Reconstructs outcomes only after exact schedule, order, immutable-field, response-window, nonce, and iframe-source checks pass. |
+| Simulation | `observers/paat_ssm.py` | Maps the PAAT regression to trial-wise drift and delegates choices/RTs to stock `Simulator(model="angle")` after installed-bound validation. Optional participant heterogeneity varies drift coefficients only, matching the teaching hierarchy. |
+| Analysis | `analysis/paat_analysis.py`, `analysis/paat_plots.py` | Reports omissions and anticipations, diagnoses regression support, and plots drift only at predictor cells present in each congruency group. |
+| Fitting | `analysis/paat_fit.py` | Uses stock `hssm.HSSM(model="angle", loglik_kind="approx_differentiable")`. The optional hierarchy places participant effects on drift only; `a`, `z`, `t`, and `theta` are pooled. The lapse mixture is disabled to match the stock simulator's data-generating process. |
+
+**Interpretation boundary.** Congruency is determined by the sign of relative reward, so reward support is disjoint across conditions and strongly correlated with the congruency indicator. There is no observation at zero standardized reward. The model's raw congruency intercept is therefore off-support; the notebook labels it as non-interpretable and excludes it from the single-fit truth check. Pair means are allowed to vary: only the 0.8 probability difference forces a mean of 0.5. HSSM's `safe` priors are used instead of the paper's full hierarchical priors, and one truth-in-interval overlay is not presented as a recovery or coverage study.
+
+**Deadline boundary.** The six-second simulator deadline produces explicit no-response rows. The packaged HSSM `angle` LAN is an observed-choice/RT likelihood and does not model these right-censored omissions. Every fit reports omissions, remains conditional on observed responses, and is blocked above a 5% omission rate either overall or for any participant. The threshold is a demo safeguard rather than a censoring correction.
+
+**Ecosystem boundary.** PAAT itself is not a registered HSSM/SSMS task model. The notebook needs no PAAT-specific SSM: it maps task predictors to the stock angle model's `v` while reusing the native `[v, a, z, t, theta]` simulator and packaged `angle.onnx` likelihood. `verify_review.py --hssm` checks parameter order, choices, bounds, both HSSM model shapes, and direct deprecated-API absence against the installed packages. Future fitting of deadline-censored omissions would require upstream likelihood support before the notebook could claim it.
+
+Full design decisions and the executable review-gate contract are in `PAAT_PLAN.md`.
+
+**Verification.** `uv run python verify_review.py --hssm` is an executable scientific gate and exits nonzero on a failed claim. Fast PAAT contracts run under the normal suite; marked slow tests construct and sample individual and v-only hierarchical HSSM models.
 
 ## Extension Guidelines
 
