@@ -120,6 +120,39 @@ class PSTConfig:
         return probs
 
 
+# The schema default remains the existing, paper-adjacent teaching schedule.  The app starts with
+# the shorter profile so a first-time player can reach the modeling steps without completing more
+# than 60 learning choices.  Keeping the profiles here (rather than only in the notebook) makes the
+# duration contract testable and reusable by simulation.
+PST_GAME_PROFILES: dict[str, dict[str, int]] = {
+    "quick": {
+        "trials_per_pair": 10,
+        "min_blocks": 1,
+        "max_blocks": 2,
+        "practice_trials": 4,
+        "test_reps": 2,
+    },
+    "thorough": {
+        "trials_per_pair": 20,
+        "min_blocks": 2,
+        "max_blocks": 4,
+        "practice_trials": 6,
+        "test_reps": 6,
+    },
+}
+
+
+def pst_config_for_profile(profile: str, *, symbol_set: str = "hiragana") -> PSTConfig:
+    """Return one of the app's named duration profiles.
+
+    ``quick`` is the app default; ``thorough`` preserves the contribution's original schedule.
+    Both use the same pairs, reward probabilities, stopping criterion, timing, and model.
+    """
+    if profile not in PST_GAME_PROFILES:
+        raise ValueError(f"profile must be one of {sorted(PST_GAME_PROFILES)}, got {profile!r}")
+    return PSTConfig(symbol_set=symbol_set, **PST_GAME_PROFILES[profile])
+
+
 @dataclass(frozen=True)
 class PSTTrialSpec:
     """One scheduled trial. Symbols are indices; glyphs are looked up on the schedule."""

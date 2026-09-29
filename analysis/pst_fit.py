@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from actors.pst_rl import PSTLearner, PSTSimulator, make_model
+from actors.pst_rl import PST_EXCLUSION_COLUMN, PSTLearner, PSTSimulator, make_model
 
 PARAMETERS: dict[str, tuple[str, str]] = {
     "eta_pos": ("Learning from wins", "How far one positive prediction error moves a symbol's value."),
@@ -358,7 +358,7 @@ def posterior_predictive_curves(
     bin_size: int = 10,
     seed: int = 0,
 ) -> dict[str, Any]:
-    """Summarize native PPC replicated choices, RTs, and deadline omissions by learning bin."""
+    """Summarize native PPC choices, RTs, deadline omissions, and anticipations by learning bin."""
     metadata = rows.sort_values(["participant_id", "trial"], kind="stable").copy()
     metadata["trial_id"] = metadata.groupby("participant_id", sort=False).cumcount()
     if len(metadata) != len(fit.table):
@@ -369,10 +369,12 @@ def posterior_predictive_curves(
     )
     ppc["bin"] = (ppc["trial_in_pair"] - 1) // bin_size + 1
     ppc["trials"] = (ppc["bin"] - 0.5) * bin_size
-    ppc["valid"] = ppc["rt"].gt(0) & ppc["response"].isin((-1, 1))
+    exclusion = ppc.get(PST_EXCLUSION_COLUMN, pd.Series(None, index=ppc.index))
+    ppc["anticipated"] = exclusion.eq("anticipated")
+    ppc["valid"] = ppc["rt"].gt(0) & ppc["response"].isin((-1, 1)) & ~ppc["anticipated"]
     ppc["chose_better"] = np.where(ppc["valid"], ppc["response"].eq(1), np.nan)
     ppc["valid_rt"] = ppc["rt"].where(ppc["valid"])
-    ppc["timed_out"] = ~ppc["valid"]
+    ppc["timed_out"] = ~ppc["valid"] & ~ppc["anticipated"]
 
     per_draw = (
         ppc.groupby(["ppc_draw", "pair", "bin", "trials"], sort=False)
@@ -380,6 +382,7 @@ def posterior_predictive_curves(
             p_better=("chose_better", "mean"),
             rt_mean=("valid_rt", "mean"),
             p_timeout=("timed_out", "mean"),
+            p_anticipation=("anticipated", "mean"),
         )
         .reset_index()
     )
@@ -400,7 +403,9 @@ def posterior_predictive_curves(
         "choice": summarize("p_better", "p_better"),
         "rt": summarize("rt_mean", "rt_mean"),
         "timeout": summarize("p_timeout", "p_timeout"),
+        "anticipation": summarize("p_anticipation", "p_anticipation"),
         "timeout_rate": float(ppc["timed_out"].mean()),
+        "anticipation_rate": float(ppc["anticipated"].mean()),
     }
 
 

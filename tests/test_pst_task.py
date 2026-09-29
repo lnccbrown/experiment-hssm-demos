@@ -9,9 +9,22 @@ from schemas.tasks.pst import (
     block_accuracy,
     classify_test_pair,
     make_schedule,
+    pst_config_for_profile,
     score_choice,
     should_stop_learning,
 )
+
+
+def test_named_game_profiles_keep_quick_default_short_and_thorough_schedule_available():
+    quick = pst_config_for_profile("quick", symbol_set="shapes")
+    thorough = pst_config_for_profile("thorough")
+
+    assert (quick.block_length, quick.min_blocks, quick.max_blocks) == (30, 1, 2)
+    assert (quick.practice_trials, quick.test_reps, quick.symbol_set) == (4, 2, "shapes")
+    assert len(make_schedule(quick, seed=0).test) == 30
+    assert thorough == PSTConfig()
+    with pytest.raises(ValueError, match="profile"):
+        pst_config_for_profile("medium")
 
 
 def test_learning_blocks_are_balanced_and_numbered():

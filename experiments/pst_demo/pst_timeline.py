@@ -124,7 +124,8 @@ def _screen(html: str, button: str, task: str = "pst_screen") -> dict[str, objec
     return {"type": "html-button-response", "stimulus": html, "choices": [button], "data": {"task": task}}
 
 
-def _duration_text(config: PSTConfig) -> str:
+def pst_learning_duration_text(config: PSTConfig) -> str:
+    """Approximate learning-phase duration shown in the app and task instructions."""
     low, high = (round(n * config.block_length * _SECONDS_PER_LEARNING_TRIAL / 60) for n in (config.min_blocks, config.max_blocks))
     return f"about {low} minutes" if low == high else f"{low} to {high} minutes"
 
@@ -150,7 +151,7 @@ def _instructions(schedule: PSTSchedule, timing: PSTTiming, include_practice: bo
         '<div class="pst-panel"><h2>Before you start</h2>'
         f"<p>&bull; There are {len(config.pairs)} pairs of symbols to learn, mixed together.</p>"
         f"<p>&bull; Answer within {timing.response_window_ms // 1000} seconds. Go with your gut.</p>"
-        f"<p>&bull; The game has {blocks} of {config.block_length} choices ({_duration_text(config)}).</p>"
+        f"<p>&bull; The game has {blocks} of {config.block_length} choices ({pst_learning_duration_text(config)}).</p>"
         "<p>&bull; Stay on this tab until the end.</p>"
         + ('<p class="pst-muted">First, a short practice with two symbols you will not see again.</p>' if include_practice else "")
         + "</div>"

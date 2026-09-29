@@ -14,7 +14,9 @@ from schemas.tasks.pst import (
     PST_RESPONSE_DEADLINE_S,
     PSTSchedule,
     PSTTrialSpec,
+    block_accuracy,
     score_choice,
+    should_stop_learning,
 )
 
 PST_TASK = "pst"
@@ -25,7 +27,20 @@ def is_pst_choice_row(row: dict[str, Any]) -> bool:
 
 
 def _optional_int(value: object) -> int | None:
-    return None if value is None else int(value)
+    if value is None:
+        return None
+    number = float(value)
+    if not pd.notna(number) or not number.is_integer():
+        raise ValueError(f"expected an integer or null, got {value!r}")
+    return int(number)
+
+
+def _validate_bool_field(row: dict[str, Any], field: str, expected: bool, *, label: str) -> None:
+    if field not in row:
+        return
+    value = row[field]
+    if type(value) is not bool or value is not expected:
+        raise ValueError(f"{label}: inconsistent {field.replace('_', ' ')} flag")
 
 
 def _validate_against_schedule(trial: PSTTrialSpec, schedule: PSTSchedule) -> None:
@@ -56,6 +71,8 @@ def pst_row_to_record(
     )
     if schedule is not None:
         _validate_against_schedule(trial, schedule)
+    if "worse_symbol" in row and int(row["worse_symbol"]) != trial.worse_symbol:
+        raise ValueError(f"{trial.phase} trial {trial.trial}: exported worse symbol is inconsistent")
     side = row.get("choice_side")
     scored = score_choice(trial, side)
     raw_response = row.get("response")
@@ -63,19 +80,20 @@ def pst_row_to_record(
     normalized_response = None if raw_response is None else str(raw_response).lower()
     if normalized_response != expected_response:
         raise ValueError(f"{trial.phase} trial {trial.trial}: response and choice_side disagree")
-    if "timed_out" in row and bool(row["timed_out"]) != scored["timed_out"]:
-        raise ValueError(f"{trial.phase} trial {trial.trial}: inconsistent timeout flag")
+    label = f"{trial.phase} trial {trial.trial}"
+    _validate_bool_field(row, "timed_out", bool(scored["timed_out"]), label=label)
 
     response_method = row.get("response_method")
     allowed_methods = {None} if scored["timed_out"] else {"key", "click"}
     if response_method not in allowed_methods:
         raise ValueError(f"{trial.phase} trial {trial.trial}: invalid response method")
+    if scored["timed_out"] and row.get("rt") is not None and pd.notna(row.get("rt")):
+        raise ValueError(f"{label}: a timeout must not carry a response time")
     rt_s = None if scored["timed_out"] else float(row["rt"]) / 1000.0
     if rt_s is not None and (not pd.notna(rt_s) or rt_s < 0 or rt_s > PST_RESPONSE_DEADLINE_S):
         raise ValueError(f"{trial.phase} trial {trial.trial}: response time is outside the task window")
     anticipated = bool(not scored["timed_out"] and rt_s is not None and rt_s < PST_MIN_RT_S)
-    if "anticipated" in row and bool(row["anticipated"]) != anticipated:
-        raise ValueError(f"{trial.phase} trial {trial.trial}: inconsistent anticipation flag")
+    _validate_bool_field(row, "anticipated", anticipated, label=label)
     if anticipated:
         scored["feedback"] = None
     browser_feedback = _optional_int(row.get("feedback"))
@@ -103,13 +121,63 @@ def pst_row_to_record(
     }
 
 
+def _validate_complete_session(
+    frame: pd.DataFrame,
+    schedule: PSTSchedule,
+    *,
+    include_practice: bool,
+    include_test: bool,
+) -> None:
+    """Validate the complete endpoint of one finished adaptive browser session."""
+    expected_phase_counts = {
+        "practice": len(schedule.practice) if include_practice else 0,
+        "test": len(schedule.test) if include_test else 0,
+    }
+    for phase, expected in expected_phase_counts.items():
+        observed = int(frame["phase"].eq(phase).sum())
+        if observed != expected:
+            raise ValueError(f"finished browser export has {observed} {phase} rows; expected {expected}")
+
+    learning = frame[frame["phase"] == "learning"]
+    block_length = schedule.config.block_length
+    if learning.empty or len(learning) % block_length:
+        raise ValueError("finished browser export ends partway through a learning block")
+    n_blocks = len(learning) // block_length
+    config = schedule.config
+    if not config.min_blocks <= n_blocks <= config.max_blocks:
+        raise ValueError(
+            f"finished browser export has {n_blocks} learning blocks; "
+            f"expected {config.min_blocks} to {config.max_blocks}"
+        )
+
+    # A block is run only if the previous completed block failed at least one criterion. If the
+    # session stops before max_blocks, its last block must be the first eligible block to pass.
+    for block in range(config.min_blocks, n_blocks):
+        accuracy = block_accuracy(learning[learning["block"] == block])
+        if should_stop_learning(block, accuracy, config):
+            raise ValueError(f"finished browser export continued after meeting the criterion in block {block}")
+    if n_blocks < config.max_blocks:
+        accuracy = block_accuracy(learning[learning["block"] == n_blocks])
+        if not should_stop_learning(n_blocks, accuracy, config):
+            raise ValueError(f"finished browser export stopped before meeting the criterion in block {n_blocks}")
+
+
 def pst_trials_dataframe(
     rows: list[dict[str, Any]] | str,
     *,
     participant_id: int = 0,
     schedule: PSTSchedule | None = None,
+    require_complete: bool = False,
+    include_practice: bool = True,
+    include_test: bool = True,
 ) -> pd.DataFrame:
-    """Build the PST response table from a jsPsych ``.json()`` export (all phases)."""
+    """Build the PST response table from a jsPsych ``.json()`` export (all phases).
+
+    Set ``require_complete`` for a finished browser run. This additionally proves that enabled
+    phases are complete and that the adaptive learning phase stopped at a valid block boundary.
+    """
+    if require_complete and schedule is None:
+        raise ValueError("require_complete needs the Python schedule used by the browser")
     frame = jspsych_rows_to_dataframe(
         rows,
         include_row=is_pst_choice_row,
@@ -128,4 +196,11 @@ def pst_trials_dataframe(
         expected = list(range(1, len(phase_rows) + 1))
         if phase_rows["trial"].tolist() != expected:
             raise ValueError(f"browser export has missing or out-of-order {phase} trials")
+    if require_complete:
+        _validate_complete_session(
+            frame,
+            schedule,
+            include_practice=include_practice,
+            include_test=include_test,
+        )
     return frame

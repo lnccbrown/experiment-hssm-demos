@@ -44,6 +44,9 @@ def test_posterior_predictive_uses_native_ssms_ppc_for_choices_and_rts():
     assert set(ppc["response"].unique()) <= {-999, -1, 1}
     assert (ppc.loc[ppc["rt"] > 0, "rt"] > 0).all()
     assert not np.array_equal(ppc["response"].to_numpy(), table["response"].to_numpy())
+    curves = posterior_predictive_curves(FakeFit(), fit_rows(observed), n_draws=1, seed=9)
+    assert 0 <= curves["timeout_rate"] <= 1
+    assert 0 <= curves["anticipation_rate"] <= 1
 
 
 def test_personal_readout_is_model_and_session_conditional():
@@ -94,6 +97,8 @@ def test_hierarchical_fit_uses_builtin_lan_and_native_ppc():
             (ppc["choice"]["p_better"] <= ppc["choice"]["high"])).all()
     assert ((ppc["rt"]["low"] <= ppc["rt"]["rt_mean"]) &
             (ppc["rt"]["rt_mean"] <= ppc["rt"]["high"])).all()
+    assert 0 <= ppc["timeout_rate"] <= 1 and 0 <= ppc["anticipation_rate"] <= 1
+    assert "anticipation" in ppc
     diagnostics = fit_diagnostics(fit)
     assert diagnostics["chains"] == 2 and diagnostics["divergences"] >= 0
     assert not diagnostics["ok"] and "four chains" in " ".join(diagnostics["issues"])

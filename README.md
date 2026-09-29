@@ -36,6 +36,10 @@ uv run marimo edit experiments/coherence_demo/ssm_coherence_demo.py
 uv run marimo run experiments/pst_demo/pst_app.py
 ```
 
+The app starts with a quick 30–60-choice learning game and no final round. Select **Thorough** to
+restore the original demo schedule of 120–240 learning choices; the optional all-pairs final round
+can be enabled independently.
+
 ### Tests
 
 ```bash

@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from schemas.tasks.pst import (
+    PST_MIN_RT_S,
     PST_RESPONSE_COLUMNS,
     PST_RESPONSE_DEADLINE_S,
     PSTConfig,
@@ -26,6 +27,12 @@ CONTEXT_FIELDS = ("pair_id", "better_symbol", "worse_symbol", "trial", "feedback
 # HSSM's built-in DDM likelihood is a LAN trained on this decision-parameter support. The learner
 # clamps the *computed* trial-wise parameters, which otherwise bypass HSSM's parameter transforms.
 LAN_DDM_BOUNDS = {"v": (-3.0, 3.0), "a": (0.3, 2.5)}
+
+# Extra columns returned by ``PSTSimulator``. SSMS represents every skipped decision with the
+# same native omission sentinel, so these retain which task rule fired and the underlying draw.
+PST_EXCLUSION_COLUMN = "pst_exclusion_reason"
+PST_RAW_RT_COLUMN = "pst_raw_rt"
+PST_RAW_RESPONSE_COLUMN = "pst_raw_response"
 
 # Group means from Pedersen et al. (2017), Table 2 (bb halved into ssms/HSSM units), and the
 # middle of their parameter-recovery grid. z is fixed at 0.5 (unbiased) in every preset.
@@ -222,30 +229,60 @@ def make_model(
 
 
 class PSTSimulator:
-    """Deadline-aware wrapper around :class:`ssms.rl.Simulator`.
+    """PST timing-rule wrapper around :class:`ssms.rl.Simulator`.
 
     SSMS' DDM ``max_t`` limits integration time but still returns a boundary choice at the limit,
     and non-decision time is added afterward. PST instead has a deadline on *total* RT. Over-deadline
     draws therefore become SSMS omission sentinels before its learning loop can update values.
+    Sub-0.2-second draws use the same mechanism, matching browser anticipations: their choice and RT
+    are retained for reporting, but no outcome is delivered and the learning state is not updated.
     """
 
-    def __init__(self, config, *, deadline_s: float = PST_RESPONSE_DEADLINE_S) -> None:
+    def __init__(
+        self,
+        config,
+        *,
+        deadline_s: float = PST_RESPONSE_DEADLINE_S,
+        minimum_rt_s: float = PST_MIN_RT_S,
+    ) -> None:
         from ssms import rl
 
-        class _DeadlineSimulator(rl.Simulator):
+        if not 0 <= minimum_rt_s < deadline_s:
+            raise ValueError("need 0 <= minimum_rt_s < deadline_s")
+
+        class _TaskRuleSimulator(rl.Simulator):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.pst_trial_metadata: list[tuple[float, int, str | None]] = []
+
             def _simulate_decision_trial(inner_self, theta, rng):
                 from ssms.basic_simulators import OMISSION_SENTINEL
 
-                rt, response = super(_DeadlineSimulator, inner_self)._simulate_decision_trial(theta, rng)
-                if not np.isfinite(rt) or rt > deadline_s:
+                rt, response = super(_TaskRuleSimulator, inner_self)._simulate_decision_trial(theta, rng)
+                reason = None
+                if rt == OMISSION_SENTINEL or not np.isfinite(rt) or rt > deadline_s:
+                    reason = "timed_out"
+                elif rt < minimum_rt_s:
+                    reason = "anticipated"
+                inner_self.pst_trial_metadata.append((float(rt), int(response), reason))
+                if reason is not None:
                     return float(OMISSION_SENTINEL), response
                 return rt, response
 
-        self._simulator = _DeadlineSimulator(config)
+        self._simulator = _TaskRuleSimulator(config)
 
     def simulate(self, *args, **kwargs) -> pd.DataFrame:
-        """Delegate to SSMS, including its native ``mode='ppc'`` path."""
-        return self._simulator.simulate(*args, **kwargs)
+        """Delegate to SSMS and annotate task-rule exclusions without replacing its native path."""
+        self._simulator.pst_trial_metadata = []
+        result = self._simulator.simulate(*args, **kwargs)
+        metadata = self._simulator.pst_trial_metadata
+        if len(metadata) != len(result):
+            raise RuntimeError("PST timing metadata does not align with SSMS simulator output")
+        result = result.copy()
+        result[PST_RAW_RT_COLUMN] = [raw_rt for raw_rt, _, _ in metadata]
+        result[PST_RAW_RESPONSE_COLUMN] = [raw_response for _, raw_response, _ in metadata]
+        result[PST_EXCLUSION_COLUMN] = [reason for _, _, reason in metadata]
+        return result
 
 
 def vary_players(
@@ -329,8 +366,16 @@ def _response_table(raw: pd.DataFrame, trials: Sequence[PSTTrialSpec], participa
     if len(raw) != len(trials):
         raise ValueError("simulator output does not match the schedule length")
     rows = []
-    for rt, response, trial in zip(raw["rt"], raw["response"], trials):
-        if rt < 0:  # ssms omission sentinel: no choice, no feedback, no learning
+    for simulated, trial in zip(raw.to_dict("records"), trials):
+        rt, response = simulated["rt"], simulated["response"]
+        exclusion = simulated.get(PST_EXCLUSION_COLUMN)
+        anticipated = exclusion == "anticipated"
+        if anticipated:
+            rt = float(simulated[PST_RAW_RT_COLUMN])
+            response = int(simulated[PST_RAW_RESPONSE_COLUMN])
+            chosen = trial.better_symbol if response == 1 else trial.worse_symbol
+            side = "left" if chosen == trial.left_symbol else "right"
+        elif rt < 0:  # ssms omission sentinel: no choice, no feedback, no learning
             side, rt = None, np.nan
         else:
             chosen = trial.better_symbol if int(response) == 1 else trial.worse_symbol
@@ -342,6 +387,7 @@ def _response_table(raw: pd.DataFrame, trials: Sequence[PSTTrialSpec], participa
                 side,
                 float(rt),
                 response_method=None if side is None else "simulated",
+                anticipated=anticipated,
             )
         )
     frame = pd.DataFrame(rows, columns=list(PST_RESPONSE_COLUMNS))
@@ -357,7 +403,11 @@ def _response_row(
     rt: float,
     *,
     response_method: str | None,
+    anticipated: bool = False,
 ) -> dict[str, object]:
+    scored = score_choice(trial, side)
+    if anticipated:
+        scored["feedback"] = None
     return {
         "participant_id": participant_id,
         "phase": trial.phase,
@@ -370,9 +420,9 @@ def _response_row(
         "better_symbol": trial.better_symbol,
         "worse_symbol": trial.worse_symbol,
         "choice_side": side,
-        **score_choice(trial, side),
+        **scored,
         "rt": rt,
-        "anticipated": False,
+        "anticipated": anticipated,
         "response_method": response_method,
     }
 
@@ -452,10 +502,11 @@ def simulate_test_phase(
     rows = []
     for rt, choice, trial in zip(out["rts"].ravel(), out["choices"].ravel(), schedule.test):
         if not np.isfinite(rt) or float(rt) < 0 or float(rt) > PST_RESPONSE_DEADLINE_S:
-            side, rt = None, np.nan
+            side, rt, anticipated = None, np.nan, False
         else:
             chosen = trial.better_symbol if choice == 1 else trial.worse_symbol
             side = "left" if chosen == trial.left_symbol else "right"
+            anticipated = float(rt) < PST_MIN_RT_S
         rows.append(
             _response_row(
                 trial,
@@ -463,6 +514,7 @@ def simulate_test_phase(
                 side,
                 float(rt),
                 response_method=None if side is None else "simulated",
+                anticipated=anticipated,
             )
         )
     frame = pd.DataFrame(rows, columns=list(PST_RESPONSE_COLUMNS))

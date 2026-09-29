@@ -38,7 +38,12 @@ def _(project_root):
         posterior_table,
     )
     from experiments.pst_demo.pst_export import pst_trials_dataframe
-    from experiments.pst_demo.pst_timeline import PST_MESSAGE_TYPE, build_pst_timeline, pst_runner_config
+    from experiments.pst_demo.pst_timeline import (
+        PST_MESSAGE_TYPE,
+        build_pst_timeline,
+        pst_learning_duration_text,
+        pst_runner_config,
+    )
     from actors.pst_rl import (
         PRESETS,
         PSTLearner,
@@ -52,11 +57,10 @@ def _(project_root):
     from runtime.embed import render_srcdoc_iframe
     from runtime.jspsych_export import create_jspsych_marimo_bridge
     from runtime.jspsych_runner import build_jspsych_runner_html
-    from schemas.tasks.pst import PSTConfig, make_schedule, symbol_label
+    from schemas.tasks.pst import make_schedule, pst_config_for_profile, symbol_label
 
     return (
         PRESETS,
-        PSTConfig,
         PSTLearner,
         PST_MESSAGE_TYPE,
         build_jspsych_runner_html,
@@ -73,7 +77,9 @@ def _(project_root):
         plots,
         posterior_table,
         posterior_predictive_curves,
+        pst_config_for_profile,
         pst_css,
+        pst_learning_duration_text,
         pst_runner_config,
         pst_trials_dataframe,
         render_srcdoc_iframe,
@@ -237,23 +243,31 @@ def _(mo):
         value="Hiragana (original task)",
         label="Symbols",
     )
-    blocks = mo.ui.range_slider(1, 6, 1, [2, 4], show_value=True, label="Blocks of 60 choices (min to max)")
+    game_length = mo.ui.dropdown(
+        {
+            "Quick · 30–60 learning choices": "quick",
+            "Thorough · 120–240 learning choices": "thorough",
+        },
+        value="Quick · 30–60 learning choices",
+        label="Game length",
+    )
     with_practice = mo.ui.switch(value=True, label="Practice round")
-    with_test = mo.ui.switch(value=True, label="Final round")
+    with_test = mo.ui.switch(value=False, label="All-pairs final round")
     new_game = mo.ui.button(value=0, on_click=lambda count: count + 1, label="New game")
-    return blocks, new_game, symbol_set, with_practice, with_test
+    return game_length, new_game, symbol_set, with_practice, with_test
 
 
 @app.cell
 def _(
-    PSTConfig,
-    blocks,
     build_jspsych_runner_html,
     build_pst_timeline,
+    game_length,
     make_schedule,
     mo,
     new_game,
     np,
+    pst_config_for_profile,
+    pst_learning_duration_text,
     pst_runner_config,
     render_srcdoc_iframe,
     step_header,
@@ -267,22 +281,32 @@ def _(
     _ = new_game.value
     game_session_id = _secrets.token_urlsafe(18)
     game_iframe_id = f"pst-game-{game_session_id}"
-    _low, _high = (int(b) for b in blocks.value)
-    _config = PSTConfig(min_blocks=_low, max_blocks=_high, symbol_set=symbol_set.value)
+    _config = pst_config_for_profile(game_length.value, symbol_set=symbol_set.value)
+    game_options = {
+        "include_practice": bool(with_practice.value),
+        "include_test": bool(with_test.value),
+    }
     game_schedule = make_schedule(_config, seed=int(np.random.default_rng().integers(2**31 - 1)))
-    _timeline = build_pst_timeline(game_schedule, include_practice=with_practice.value, include_test=with_test.value)
+    _timeline = build_pst_timeline(game_schedule, **game_options)
     _html = build_jspsych_runner_html(_timeline, config=pst_runner_config(session_id=game_session_id))
-    _minutes = f"{round(_low * 2.4)}" if _low == _high else f"{round(_low * 2.4)} to {round(_high * 2.4)}"
+    _duration = pst_learning_duration_text(_config)
+    _profile = "Quick" if game_length.value == "quick" else "Thorough"
     mo.vstack(
         [
             step_header(
                 1,
                 "Play",
-                f"Shortened learning phase: about {_minutes} minutes, plus the final round if enabled. "
+                f"{_profile} profile: {_duration} of learning, plus optional practice and final rounds. "
                 "Choose with the &larr; and &rarr; keys (fastest) or by clicking a symbol.",
                 "play",
             ),
-            mo.hstack([symbol_set, blocks, with_practice, with_test, new_game], justify="start", align="center", gap=1.5, wrap=True),
+            mo.hstack(
+                [symbol_set, game_length, with_practice, with_test, new_game],
+                justify="start",
+                align="center",
+                gap=1.5,
+                wrap=True,
+            ),
             mo.Html(
                 render_srcdoc_iframe(
                     _html,
@@ -295,7 +319,7 @@ def _(
         ],
         gap=0.8,
     )
-    return game_iframe_id, game_schedule, game_session_id
+    return game_iframe_id, game_options, game_schedule, game_session_id
 
 
 @app.cell
@@ -310,8 +334,13 @@ def _(PST_MESSAGE_TYPE, create_jspsych_marimo_bridge, game_iframe_id, game_sessi
 
 
 @app.cell
-def _(game_results, game_schedule, pst_trials_dataframe):
-    human_df = pst_trials_dataframe(game_results.value["rows_json"], schedule=game_schedule).assign(source="You")
+def _(game_options, game_results, game_schedule, pst_trials_dataframe):
+    human_df = pst_trials_dataframe(
+        game_results.value["rows_json"],
+        schedule=game_schedule,
+        require_complete=True,
+        **game_options,
+    ).assign(source="You")
     return (human_df,)
 
 
@@ -414,7 +443,7 @@ def _(PRESETS, mo):
 
 
 @app.cell
-def _(PRESETS, mo, preset):
+def _(PRESETS, game_schedule, mo, preset):
     _p = PRESETS[preset.value]
     sim_params = mo.ui.dictionary(
         {
@@ -427,7 +456,13 @@ def _(PRESETS, mo, preset):
         }
     )
     n_players = mo.ui.number(1, 20, 1, 5, label="Players")
-    sim_blocks = mo.ui.number(1, 6, 1, 4, label="Blocks of 60 choices")
+    sim_blocks = mo.ui.number(
+        1,
+        6,
+        1,
+        game_schedule.config.max_blocks,
+        label=f"Blocks of {game_schedule.config.block_length} choices",
+    )
     spread = mo.ui.slider(0.0, 0.5, 0.05, 0.0, show_value=True, label="Individual differences")
     run_sim = mo.ui.run_button(label="Simulate players", kind="success")
     return n_players, run_sim, sim_blocks, sim_params, spread
@@ -455,8 +490,9 @@ def _(mo, n_players, preset, run_sim, sim_blocks, sim_params, spread, step_heade
 
 @app.cell
 def _(
-    PSTConfig,
     final_values,
+    game_options,
+    game_schedule,
     make_schedule,
     mo,
     n_players,
@@ -471,25 +507,31 @@ def _(
     spread,
     vary_players,
 ):
+    import dataclasses as _dataclasses
+
     mo.stop(not run_sim.value)
     _theta = {name: float(value) for name, value in sim_params.value.items()}
     _n, _blocks = int(n_players.value), int(sim_blocks.value)
     _seed = int(np.random.default_rng().integers(2**31 - 1))
     _players = vary_players(_theta, n_players=_n, spread=float(spread.value), seed=_seed)
-    _config = PSTConfig(min_blocks=_blocks, max_blocks=_blocks)
+    _config = _dataclasses.replace(game_schedule.config, min_blocks=_blocks, max_blocks=_blocks)
     with mo.status.spinner(title="Simulating players…"):
         _learning = simulate_players(_players, config=_config, n_blocks=_blocks, seed=_seed)
-        _final = [
-            simulate_test_phase(
-                final_values(_learning[_learning["participant_id"] == i], p),
-                p,
-                make_schedule(_config, seed=_seed + i),
-                last_learning_trial=_blocks * _config.block_length,
-                participant_id=i,
-                seed=_seed + i,
-            )
-            for i, p in enumerate(_players)
-        ]
+        _final = (
+            [
+                simulate_test_phase(
+                    final_values(_learning[_learning["participant_id"] == i], p),
+                    p,
+                    make_schedule(_config, seed=_seed + i),
+                    last_learning_trial=_blocks * _config.block_length,
+                    participant_id=i,
+                    seed=_seed + i,
+                )
+                for i, p in enumerate(_players)
+            ]
+            if game_options["include_test"]
+            else []
+        )
     set_sim(
         {
             "df": pd.concat([_learning, *_final], ignore_index=True).assign(source="Simulated"),
@@ -498,6 +540,7 @@ def _(
             "spread": float(spread.value),
             "n": _n,
             "blocks": _blocks,
+            "choices_per_player": _blocks * _config.block_length,
         }
     )
     return
@@ -515,7 +558,7 @@ def _(get_sim, mo, pa, plots):
         _out = mo.vstack(
             [
                 mo.md(
-                    f"Simulated **{_sim['n']} player(s)** × {_sim['blocks'] * 60} choices{_variation}. "
+                    f"Simulated **{_sim['n']} player(s)** × {_sim['choices_per_player']} choices{_variation}. "
                     f"Last block: {_acc}; average response time {_stats['mean_rt']:.2f} s; "
                     f"{_stats['timeouts']} deadline omission(s). These players now also "
                     "appear in step 2."
@@ -641,7 +684,8 @@ def _(
     _state = get_fit()
     if _state is None:
         _out = note(
-            "No fit yet. Choose the data and press <strong>Fit the model</strong>; your game takes about half a minute.",
+            "No fit yet. Choose the data and press <strong>Fit the model</strong>. Runtime depends on the data, "
+            "hardware, and sampler settings and can take several minutes.",
             kind="empty",
         )
     else:
@@ -662,10 +706,21 @@ def _(
                 "Inference uses HSSM's built-in approximate DDM likelihood network. Deadline trials are explicit "
                 "omissions in the task and simulator, but current RLSSM cannot fit censored trials. Omissions are "
                 "therefore excluded; the fitted likelihood does not correct for deadline truncation. The regularizing "
-                "priors are choices made for this teaching app, not the cited paper's hierarchical priors.",
+                "priors are choices made for this teaching app, not the cited paper's hierarchical priors. Trial-wise "
+                "drift and boundary values are clipped to the likelihood network's validated support.",
                 label="Model scope:",
             )
         )
+        if _info["kept"] < 100:
+            _parts.append(
+                note(
+                    f"Only {_info['kept']} learning choices enter this fit. The quick game is intentionally brief, "
+                    "so a six-parameter RL-DDM can be weakly identified and noticeably prior-sensitive. Use the "
+                    "thorough profile or multiple simulated players for a more informative teaching fit.",
+                    kind="warn",
+                    label="Short-session fit.",
+                )
+            )
         if _info["mixed_response_methods"]:
             _parts.append(
                 note(
@@ -728,7 +783,8 @@ def _(
                         mo.md(
                             f"<small>Each dashed curve comes from replicated choices and RTs generated by "
                             f"`ssms.rl.Simulator(...).simulate(mode='ppc')`, conditional on observed learning "
-                            f"history. Replicated deadline-omission rate: {_ppc['timeout_rate']:.1%}.</small>"
+                            f"history. Replicated deadline-omission rate: {_ppc['timeout_rate']:.1%}; "
+                            f"anticipation rate: {_ppc['anticipation_rate']:.1%}.</small>"
                         ),
                     ]
                 ),

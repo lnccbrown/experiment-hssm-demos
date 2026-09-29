@@ -6,7 +6,9 @@ from actors.pst_rl import (
     CONTEXT_FIELDS,
     LAN_DDM_BOUNDS,
     PRESETS,
+    PST_EXCLUSION_COLUMN,
     PSTLearner,
+    PSTSimulator,
     final_values,
     make_model,
     replay_latents,
@@ -109,6 +111,37 @@ def test_total_rt_deadline_creates_omissions_without_learning_updates():
     assert df.loc[df["timed_out"], ["rt", "response", "feedback"]].isna().all().all()
     assert (df.loc[~df["timed_out"], "rt"] <= 4.0).all()
     assert df["response_method"].dropna().eq("simulated").all()
+
+
+def test_simulated_anticipations_retain_choice_but_skip_feedback_and_learning_update():
+    class CountingLearner(PSTLearner):
+        def __init__(self):
+            super().__init__()
+            self.updates = 0
+
+        def update_jax(self, state, params, context):
+            self.updates += 1
+            return super().update_jax(state, params, context)
+
+    fast = {**MIDDLE, "m": 0.1, "bb": 0.3, "bp": 0.0, "t": 0.05}
+    learner = CountingLearner()
+    model = make_model(n_blocks=1, learner=learner)
+    raw = PSTSimulator(model).simulate(
+        theta={**fast, "z": 0.5},
+        n_trials=model.task_environment.n_trials,
+        n_participants=1,
+        random_state=32,
+    )
+    anticipated = raw[PST_EXCLUSION_COLUMN].eq("anticipated")
+    assert anticipated.any()
+    assert learner.updates == int(raw[PST_EXCLUSION_COLUMN].isna().sum())
+
+    df = simulate_players(fast, n_blocks=1, seed=32)
+    assert df["anticipated"].any()
+    assert (~df.loc[df["anticipated"], "timed_out"]).all()
+    assert (df.loc[df["anticipated"], "rt"] < 0.2).all()
+    assert df.loc[df["anticipated"], "response"].isin((-1, 1)).all()
+    assert df.loc[df["anticipated"], "feedback"].isna().all()
 
 
 def test_replay_starts_at_initial_values_and_matches_final_values():

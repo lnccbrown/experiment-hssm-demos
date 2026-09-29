@@ -1,6 +1,6 @@
 # Probabilistic Selection Task: implemented design and scientific scope
 
-Branch `feature/pst-task`, reviewed 2026-09-23.
+Branch `feature/pst-task`, reviewed 2026-09-29.
 
 The marimo app is a shortened, interactive teaching variant of the Probabilistic Selection Task (PST). Its learning model follows the RL-DDM equations in Pedersen, Frank & Biele (2017), and its software path deliberately uses the existing HSSM/ssm-simulators RLSSM tooling.
 
@@ -8,23 +8,32 @@ The marimo app is a shortened, interactive teaching variant of the Probabilistic
 
 1. Python creates a seeded schedule, including the outcome that would follow either choice.
 2. A sandboxed jsPsych iframe runs the task and returns rows over a nonce- and source-bound channel.
-3. Python validates every returned trial against that exact schedule and re-scores the response.
+3. Python validates every returned trial against that exact schedule, re-scores the response, and
+   verifies that a finished adaptive session ended at a permissible block and contains every enabled phase.
 4. `PSTLearner` and `PSTEnvironment` define one `ssms.rl.ModelConfig` used by both simulation and fitting.
-5. `ssms.rl.Simulator` generates virtual players. A thin deadline wrapper turns total RTs over four seconds into native omission sentinels before a generative learning update.
+5. `ssms.rl.Simulator` generates virtual players. A thin task-rule wrapper turns total RTs over four
+   seconds and RTs below 0.2 seconds into native omission sentinels before a generative learning update;
+   output metadata distinguishes deadline omissions from anticipations and retains an anticipation's choice/RT.
 6. `hssm.rl.RLSSMConfig.from_ssms_model(...)` translates the same model into a stock `hssm.RLSSM` fit.
 7. HSSM's built-in differentiable DDM neural likelihood (LAN) supplies the likelihood. There is no locally registered DDM likelihood.
-8. Posterior predictive data come from `Simulator(...).simulate(mode="ppc", observed_data=...)`, including replicated choices, RTs and deadline omissions.
+8. Posterior predictive data come from `Simulator(...).simulate(mode="ppc", observed_data=...)`, including replicated choices, RTs, deadline omissions and anticipations.
 
 The former custom analytical/JAX DDM registration and custom posterior-prediction implementation were removed. `analysis/jax_ddm.py` and `register_exact_ddm()` no longer exist.
 
 ## Task
 
 - Learning pairs: AB 80/20, CD 70/30 and EF 60/40.
-- Each block has 20 presentations per pair, with balanced sides and shuffled order.
-- The browser uses the original accuracy thresholds after the configured minimum number of blocks. The app defaults to two-to-four blocks, rather than presenting this as the full cited protocol.
-- The optional final round contains all 15 symbol pairings, with six presentations of each pairing and no feedback.
+- Sides are balanced within each pair/block and presentation order is shuffled.
+- The browser uses the original accuracy thresholds after the configured minimum number of blocks.
+- The app defaults to a **quick** profile: one-to-two 30-choice blocks (10 presentations per pair),
+  four practice choices, and the all-pairs final round disabled. This is intentionally convenient but
+  data-poor; a six-parameter individual fit can be weakly identified and prior-sensitive.
+- A **thorough** profile preserves the contribution's original schedule: two-to-four 60-choice blocks
+  (20 presentations per pair), six practice choices, and six presentations of each of the 15 pairings
+  when the optional feedback-free final round is enabled.
 - Responses have a four-second total-RT deadline.
-- Responses faster than 0.2 seconds are anticipations. The browser withholds their outcome and points, so removing them later does not erase an experienced learning event.
+- Responses faster than 0.2 seconds are anticipations. Browser and simulator both withhold their
+  outcome and learning update, so removing them later does not erase an experienced learning event.
 - Key and click input are both supported and retained in `response_method`.
 
 The all-pair final round and frozen-value test simulator are app choices. The RL-DDM is fitted only to the learning phase.
@@ -50,6 +59,7 @@ HSSM's built-in DDM LAN is approximate and has finite validated support. Trial-w
 - `link_settings="log_logit"` keeps population and participant parameters within HSSM's registered bounds.
 - App-specific regularizing priors are specified on the link scale. They are not Pedersen et al.'s JAGS hyperpriors.
 - The upper bound for non-decision time is below the fastest retained RT across all participants.
+- The fitted model has no lapse/outlier mixture (`p_outlier=0`); valid but atypical RTs remain in the fit.
 - RLSSM requires a balanced panel. After omissions and anticipations are removed, each participant is truncated to the smallest retained count; the notebook reports that loss. A participant with no valid rows causes the fit to stop rather than being silently discarded.
 - Simulator and exported data keep original trial numbers, so the changing boundary still uses elapsed task trial rather than the compact RLSSM row index.
 
@@ -57,7 +67,7 @@ The current HSSM RLSSM likelihood cannot model the task's right-censored deadlin
 
 ## Posterior checking and interpretation
 
-The native SSMS PPC conditions learning-state updates on observed choices and outcomes, then generates a new decision response and RT at every retained trial. It is a conditional decision-layer check, not a fully generative replication of reward and learning histories. The app plots 90% across-draw bands for both choice proportions and mean RTs and reports the replicated omission rate.
+The native SSMS PPC conditions learning-state updates on observed choices and outcomes, then generates a new decision response and RT at every retained trial. It is a conditional decision-layer check, not a fully generative replication of reward and learning histories. The app plots 90% across-draw bands for both choice proportions and mean RTs and reports replicated deadline-omission and anticipation rates.
 
 Substantive panels are gated on:
 
@@ -76,7 +86,8 @@ The recovery panel compares a single simulated dataset with its known generating
 
 - Every exported schedule field must match the Python schedule.
 - Feedback and anticipation flags are independently recomputed.
-- Duplicate, missing, reordered and over-deadline response rows are rejected.
+- Duplicate, missing, reordered and over-deadline response rows are rejected. The app additionally
+  checks complete practice/test phases and the exact adaptive learning endpoint before accepting a result.
 - Every game receives a fresh unpredictable result-session identifier and iframe id.
 - The bridge accepts only a matching nonce from that iframe's `contentWindow`.
 - The iframe uses `sandbox="allow-scripts"` without `allow-same-origin`.
@@ -98,12 +109,33 @@ runtime/                              generic iframe runner and secured result b
 
 ## Dependencies and verification
 
-The supported API floor is HSSM 0.4 with ssm-simulators 0.13.2. The lockfile may resolve newer compatible versions. The built-in DDM LAN's ONNX artifact is fetched from Hugging Face on first use when it is not already cached.
+The supported API floor is HSSM 0.4 with ssm-simulators 0.13.2. On 2026-09-29 the lockfile resolves
+HSSM 0.5.0 and ssm-simulators 0.14.0, which are also the current PyPI releases. The built-in DDM
+LAN's ONNX artifact is fetched from Hugging Face on first use when it is not already cached.
 
 ```bash
 uv run pytest            # fast Python tests plus Node browser-script tests
 uv run pytest -m slow    # real single-participant and hierarchical HSSM fits + native PPC
-uv run marimo check experiments/pst_demo/pst_app.py
+uv run marimo check --strict experiments/pst_demo/pst_app.py
 ```
 
 The slow suite is intentionally computationally intensive; it tests integration, not a formal recovery study.
+
+### Consolidation validation (2026-09-29)
+
+- `uv lock --check`: passed.
+- `uv run pytest -q`: **52 passed, 2 deselected** in 6.47 s.
+- Final review rerun, `.venv/bin/pytest -q`: **52 passed, 2 deselected** in 6.75 s.
+- `uv run --isolated --with 'hssm==0.4.0' --with 'ssm-simulators==0.13.2' pytest -q`:
+  **52 passed, 2 deselected** in 6.89 s, exercising the declared API floors.
+- `uv run pytest -q -m slow`: **2 passed, 52 deselected** in 339.27 s. This ran both the real
+  hierarchical fit/native PPC and the real single-participant fixed-boundary fit. The 16 warnings
+  were upstream HSSM/Bambi deprecations and sequential-chain notices on a one-device host.
+- `uv run marimo check --strict experiments/pst_demo/pst_app.py`: passed.
+- `git diff --check`: passed.
+
+The app server was launched successfully at its local URL, but a reliable manual Play → Simulate →
+Fit → Check traversal was not completed: the available browser-control surface repeatedly requested
+macOS automation permission and then blocked on Chrome's first-run profile UI. No manual browser
+behavior is claimed from that attempt; the browser export, isolation, task semantics, fitting and PPC
+paths are covered by the fast and marked integration tests above.
