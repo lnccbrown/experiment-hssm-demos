@@ -424,8 +424,8 @@ Role:
 5. After intro, a 3-second countdown runs; then motion trials call `__startAllMotionCanvases` on `on_load`.
 6. Scoring uses `__jsPsychInstance` on `on_finish`; feedback trials follow each motion trial.
 7. On experiment end, in-iframe Vega-Lite charts summarize accuracy and mean RT by coherence (`demo_results_charts.js`).
-8. Runner posts `{ type: "jspsych-results", rows_json }` to the parent page (`jspsych_runner_core.js`).
-9. `create_jspsych_marimo_bridge()` receives `rows_json`; a downstream marimo cell builds `demo_df` via `motion_trials_dataframe`.
+8. Runner posts `{ type: "jspsych-results", session_id, rows_json }` to the parent page (`jspsych_runner_core.js`).
+9. `create_jspsych_marimo_bridge()` accepts only the matching session nonce and iframe window; a downstream marimo cell builds `demo_df` via `motion_trials_dataframe`.
 
 ### Python simulation + HSSM
 
@@ -435,6 +435,55 @@ Role:
 4. tabular data is assembled for modeling.
 5. user triggers HSSM fit with dedicated run control.
 6. summaries and charts are rendered in-app (including model cartoon).
+
+## Probabilistic Selection Task (PST) demo
+
+The PST is a second paradigm built on the same layers. It is explicitly a shortened teaching variant, not an exact replication. `experiments/pst_demo/pst_app.py` lets a user play the task, explore the data, simulate RL-DDM players, fit the learning phase with HSSM, and inspect a single-dataset recovery illustration.
+
+The model equations follow Pedersen, Frank & Biele (2017), while task length, priors, likelihood implementation and presentation are app-specific choices. Design decisions and scientific limitations are recorded in `PST_PLAN.md`.
+
+| Layer | Module | Role |
+|---|---|---|
+| Task | `schemas/tasks/pst.py` | Pairs AB/CD/EF (80/20, 70/30, 60/40); seeded schedules with both possible rewards pre-drawn; balanced/shuffled adaptive blocks; all 15 test pairings. The app defaults to a quick profile (one-to-two 30-choice blocks, four practice choices, two test repetitions when enabled); Thorough preserves two-to-four 60-choice blocks, six practice choices and six test repetitions. `score_choice` accuracy-codes response +1 as the better symbol / upper DDM boundary. Shared 4 s deadline and 0.2 s anticipation threshold. |
+| Actors | `actors/pst_rl.py` | `PSTLearner` and `PSTEnvironment` are `ssms.rl` plug-ins. `PSTSimulator` delegates to the official `ssms.rl.Simulator` and maps deadline omissions and sub-0.2 s anticipations to native omission sentinels before the generative learning update, while retaining their distinct reason. Computed `v` and `a` are clipped to the built-in DDM LAN support. Includes paper-derived presets, bounded individual variation, latent replay and a frozen-value test-phase simulation. |
+| Browser | `renderers/pst_symbols/`, `experiments/pst_demo/pst_timeline.py`, `pst_stimulus_plugin.py` | Hiragana or shape cards, answered by key or click. Anticipations receive no outcome or points, so excluding them cannot remove a learning event that the participant observed. Raw rows retain `response_method`. |
+| Export | `experiments/pst_demo/pst_export.py` | jsPsych rows → PST response table. Re-scores choices, checks the exact Python schedule, feedback and timing flags, and rejects duplicate, missing, reordered or over-deadline rows. Finished app sessions must also contain every enabled phase and end on the first permissible adaptive block. |
+| Analysis | `analysis/pst_analysis.py`, `analysis/pst_plots.py` | Learning/RT curves, signed RTs and choose-A / avoid-B summaries. Anticipations and omissions are excluded from fitted and final-round summaries. RLSSM input is balanced after exclusions, with every removal reported. |
+| Fitting | `analysis/pst_fit.py` | Stock `hssm.rl.RLSSMConfig.from_ssms_model(...)` and `hssm.RLSSM`, using HSSM's built-in differentiable, approximate DDM LAN. One participant gets an intercept model; multiple participants get participant random effects for every free parameter. Support-preserving generalized-logit links are used. Native `Simulator(...).simulate(mode="ppc")` produces conditional replicated choices and RTs. |
+
+**Units.** ssms and HSSM place the DDM bounds at ±a, so `a` is half the Wiener boundary separation used in the paper. The paper's `bb` values are therefore halved in the presets.
+
+**Response table** (`PST_RESPONSE_COLUMNS`):
+
+- `participant_id`, `phase`, `block`
+- `trial` (1-based; drives a(t))
+- `pair`, `pair_id`
+- `left_symbol`, `right_symbol`, `better_symbol`, `worse_symbol`, `chosen_symbol`, `choice_side`
+- `response` (+1 / −1)
+- `feedback` (0 / 1; none in the test phase)
+- `rt` (seconds)
+- `timed_out`
+- `anticipated` (answered before 0.2 s; no feedback is shown)
+- `response_method` (`key`, `click`, `simulated`, or none for an omission)
+
+**Fitting and model checking.** Only valid learning responses enter RLSSM. Multiple participants are fitted hierarchically, and the balanced-panel requirement is enforced after exclusions. Posterior tables report r-hat, bulk/tail ESS and MCSE; interpretation and posterior predictive plots are withheld unless convergence, ESS, divergences, BFMI and tree-depth checks pass. The PPC is HSSM/SSMS's observed-history-conditioned mode: simulated choices and RTs are generated while learning-state updates follow the observed choices and outcomes. Replicated deadline omissions and anticipations are reported separately.
+
+**Scientific scope.** The built-in DDM likelihood is a neural likelihood approximation, not the analytical Wiener likelihood. Values of computed `v` and `a` outside its validated support are clipped, changing the unconstrained Pedersen model in those regions. Omissions are generated with the same total-RT deadline as the browser, but RLSSM cannot fit censored trials: omissions are dropped and the likelihood does not correct for deadline truncation. The fit also deliberately disables HSSM's lapse/outlier mixture (`p_outlier=0`). The app's priors are regularizing choices on HSSM's link scale, not the paper's hierarchical priors. The quick profile improves completion time at the cost of less information and more prior-sensitive individual fits. Test-phase choices are descriptive and are not included in the RL-DDM fit. One simulate–fit result is an internal consistency illustration, not evidence about bias, interval coverage or general parameter recoverability.
+
+**Runner/runtime behavior:**
+
+- nested jsPsych timelines, with `conditional_function` / `loop_function`;
+- `RunnerConfig.revive_keys` is now honoured by the browser;
+- `RunnerConfig.results_view` selects the end-of-run view;
+- `load_vega` makes the Vega scripts optional;
+- `RunnerConfig.focus_guard` dims the task with "Click here to play" and pauses between trials whenever the iframe cannot receive key presses (keys only reach an iframe after it is clicked);
+- jsPsych's per-trial focus call no longer scrolls the host page.
+- each result channel has a fresh session nonce and is bound to its specific iframe window;
+- embedded `srcdoc` frames are sandboxed with scripts allowed but without same-origin privileges.
+
+**Dependencies.** The declared API floors are HSSM ≥ 0.4 and ssm-simulators ≥ 0.13.2. The 2026-09-29 lock resolves the current releases, HSSM 0.5.0 and ssm-simulators 0.14.0; the fast suite is also exercised in an isolated environment at both declared floors. No range was broadened during consolidation. HSSM's built-in DDM LAN artifact is downloaded from Hugging Face on first use if it is not cached.
+
+**Tests.** `uv run pytest` runs fast Python and browser-script checks. `uv run pytest -m slow` runs real single-participant and hierarchical HSSM fits plus native PPC, and is intentionally computationally intensive. `uv run marimo check --strict experiments/pst_demo/pst_app.py` validates the reactive graph.
 
 ## Extension Guidelines
 

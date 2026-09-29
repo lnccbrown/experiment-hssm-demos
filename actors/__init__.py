@@ -3,6 +3,14 @@
 
 from actors.prior_predictive_actor import NAfcActor
 from actors.prior_predictive_subject_actor import PriorPredictiveActor
+from actors.pst_rl import PSTEnvironment, PSTLearner, PSTSimulator
 from actors.ssm_actor import DdmActor
 
-__all__ = ["DdmActor", "NAfcActor", "PriorPredictiveActor"]
+__all__ = [
+    "DdmActor",
+    "NAfcActor",
+    "PSTEnvironment",
+    "PSTLearner",
+    "PSTSimulator",
+    "PriorPredictiveActor",
+]

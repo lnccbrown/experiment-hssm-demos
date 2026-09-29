@@ -30,6 +30,23 @@ Or open in the editor:
 uv run marimo edit experiments/coherence_demo/ssm_coherence_demo.py
 ```
 
+**Probabilistic Selection Task** (a shortened reinforcement-learning + DDM teaching variant based on Pedersen, Frank & Biele 2017): play the task, simulate players, fit the RL-DDM with HSSM, and inspect a single-dataset recovery illustration:
+
+```bash
+uv run marimo run experiments/pst_demo/pst_app.py
+```
+
+The app starts with a quick 30–60-choice learning game and no final round. Select **Thorough** to
+restore the original demo schedule of 120–240 learning choices; the optional all-pairs final round
+can be enabled independently.
+
+### Tests
+
+```bash
+uv run pytest            # fast tests (Python + browser scripts via node)
+uv run pytest -m slow    # computationally intensive real HSSM fits
+```
+
 ### Notes
 
 - The tutorial simulates a **binary left/right motion task** for multiple actors and trials using **jsPsych-style** trial objects in Python; motion previews use **Canvas** in the browser.
@@ -39,3 +56,4 @@ uv run marimo edit experiments/coherence_demo/ssm_coherence_demo.py
 ### Project docs
 
 - Detailed file/directory responsibilities: `DOCUMENTATION.md`
+- PST app design, decisions and validation results: `PST_PLAN.md`

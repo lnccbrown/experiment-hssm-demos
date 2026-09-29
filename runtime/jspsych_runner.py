@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,11 +33,24 @@ class RunnerConfig:
     extra_scripts: tuple[str, ...] = ()  # runtime/ or renderers/ paths
     extra_styles: tuple[str, ...] = ()  # runtime/ or renderers/ paths
     input_arrow_keys: bool = False
+    focus_guard: bool = False  # dim + pause while the iframe cannot receive key presses
     results_message_type: str = "jspsych-results"
+    results_session_id: str | None = None  # nonce used to bind results to one iframe run
     show_results_charts: bool = False
     results_task_filter: str | None = None
+    results_view: str = "JsPsychDemoCharts"  # global JS object whose mount(rows) draws the end screen
+    load_vega: bool = True  # Vega-Lite scripts for chart-based results views
     revive_keys: tuple[str, ...] = field(
-        default_factory=lambda: ("on_finish", "on_start", "on_load", "stimulus")
+        default_factory=lambda: (
+            "on_finish",
+            "on_start",
+            "on_load",
+            "stimulus",
+            "conditional_function",
+            "loop_function",
+            "on_timeline_start",
+            "on_timeline_finish",
+        )
     )
 
 
@@ -119,27 +133,20 @@ def build_jspsych_runner_html(
     """Build a standalone jsPsych HTML runner page from template assets."""
     cfg = config or RunnerConfig()
     if title is not None:
-        cfg = RunnerConfig(
-            title=title,
-            display_element=cfg.display_element,
-            plugins=cfg.plugins,
-            extra_scripts=cfg.extra_scripts,
-            extra_styles=cfg.extra_styles,
-            input_arrow_keys=cfg.input_arrow_keys,
-            results_message_type=cfg.results_message_type,
-            show_results_charts=cfg.show_results_charts,
-            results_task_filter=cfg.results_task_filter,
-            revive_keys=cfg.revive_keys,
-        )
+        cfg = dataclasses.replace(cfg, title=title)
 
     timeline_b64 = _encode_json_b64(timeline)
     config_payload = {
         "display_element": cfg.display_element,
         "plugins": list(cfg.plugins),
         "input_arrow_keys": cfg.input_arrow_keys,
+        "focus_guard": cfg.focus_guard,
         "results_message_type": cfg.results_message_type,
+        "results_session_id": cfg.results_session_id,
         "show_results_charts": cfg.show_results_charts,
         "results_task_filter": cfg.results_task_filter,
+        "results_view": cfg.results_view,
+        "revive_keys": list(cfg.revive_keys),
     }
     config_b64 = _encode_json_b64(config_payload)
     title_safe = cfg.title.replace("<", "&lt;").replace(">", "&gt;")
@@ -157,7 +164,7 @@ def build_jspsych_runner_html(
         .replace("__JSPSYCH_CORE_JS__", JSPSYCH_CORE_JS)
         .replace(
             "__VEGA_SCRIPT_TAGS__",
-            _vega_script_tags() if cfg.show_results_charts else "",
+            _vega_script_tags() if cfg.show_results_charts and cfg.load_vega else "",
         )
         .replace("__PLUGIN_SCRIPT_TAGS__", _plugin_script_tags(cfg.plugins))
         .replace("__RUNNER_CSS__", _runner_css())
