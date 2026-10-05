@@ -1,0 +1,233 @@
+/* Layout for the PST marimo app: hero, numbered steps, result tables. Theme-neutral colours. */
+
+.pst-hero {
+  padding: 1.4rem 1.6rem 1.2rem;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.07), rgba(109, 40, 217, 0.07));
+}
+
+.pst-hero h1 {
+  margin: 0.1rem 0 0.5rem;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.pst-hero p {
+  margin: 0.3rem 0;
+  max-width: 46rem;
+  line-height: 1.55;
+}
+
+.pst-hero__logo {
+  float: right;
+  height: 46px;
+  margin-left: 1rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.pst-hero__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.pst-hero__steps a {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.pst-hero__steps a:hover {
+  background: rgba(100, 116, 139, 0.12);
+}
+
+.pst-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  margin-top: 1.6rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid rgba(100, 116, 139, 0.25);
+  scroll-margin-top: 1rem;
+}
+
+.pst-step__num {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 700;
+}
+
+.pst-step__title {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.pst-step__lead {
+  margin: 0.2rem 0 0;
+  opacity: 0.75;
+}
+
+.pst-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.pst-table th,
+.pst-table td {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.25);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pst-table th {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.pst-table .num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pst-table .meaning {
+  display: block;
+  font-size: 0.82rem;
+  opacity: 0.7;
+}
+
+.pst-ok {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.pst-miss {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.pst-subhead {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* Notes: compact replacements for mo.callout. Text size matches the page; the width stays readable. */
+.pst-note {
+  box-sizing: border-box;
+  max-width: 52rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-left: 3px solid var(--pst-accent, #0f766e);
+  border-radius: 8px;
+  background: rgba(100, 116, 139, 0.06);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.pst-note__label {
+  font-weight: 700;
+  color: var(--pst-accent, #0f766e);
+}
+
+.pst-note--hint {
+  --pst-accent: #0f766e;
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.pst-note--empty {
+  border: 1px dashed rgba(100, 116, 139, 0.45);
+  background: transparent;
+  opacity: 0.85;
+}
+
+.pst-note--warn {
+  --pst-accent: #b45309;
+  background: rgba(217, 119, 6, 0.08);
+}
+
+.pst-note--danger {
+  --pst-accent: #b91c1c;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.pst-note--success {
+  --pst-accent: #15803d;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+/* Number tiles ("Your game", "About you"). */
+.pst-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+}
+
+/* Sentence tiles come in twos and fours: a steady two-column grid keeps rows balanced. */
+.pst-stats--sentences {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 560px) {
+  .pst-stats--sentences {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pst-stat {
+  padding: 0.6rem 0.8rem 0.65rem;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-radius: 12px;
+  background: rgba(100, 116, 139, 0.05);
+}
+
+.pst-stat__label {
+  overflow: hidden;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.75;
+}
+
+.pst-stats--sentences .pst-stat__label {
+  white-space: normal;
+}
+
+.pst-stat__value {
+  margin-top: 0.1rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.pst-stat__caption {
+  font-size: 0.76rem;
+  opacity: 0.6;
+}
+
+.pst-stats--sentences .pst-stat__value {
+  font-size: 1.25rem;
+}
+
+.pst-stats--sentences .pst-stat__caption {
+  margin-top: 0.2rem;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  opacity: 0.8;
+}

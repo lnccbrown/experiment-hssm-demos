@@ -1,0 +1,286 @@
+/* PST choice screens, feedback, breaks and results (jsPsych iframe), plus the marimo symbol gallery. */
+
+/* The game stage (exists only inside the iframe): a soft backdrop, so screens sit on a surface. */
+#jspsych-target {
+  background: #f1f4f8;
+}
+
+#jspsych-target .jspsych-btn {
+  padding: 0.55rem 1.3rem;
+  border: 1px solid #0f766e;
+  border-radius: 10px;
+  background: #0f766e;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+#jspsych-target #jspsych-html-button-response-btngroup {
+  margin-top: 0.9rem;
+}
+
+#jspsych-target .jspsych-btn:hover {
+  border-color: #115e59;
+  background: #115e59;
+}
+
+.pst-screen {
+  --pst-card: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+  font-family: system-ui, sans-serif;
+  color: #0f172a;
+}
+
+.pst-status {
+  display: flex;
+  justify-content: space-between;
+  width: min(560px, 90vw);
+  min-height: 1.4em;
+  font-size: 0.95rem;
+  color: #475569;
+}
+
+.pst-status__points {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pst-cards {
+  display: flex;
+  gap: clamp(2rem, 10vw, 7rem);
+}
+
+.pst-card {
+  width: var(--pst-card, 150px);
+  height: var(--pst-card, 150px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #cbd5e1;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  color: #334155;
+}
+
+.pst-card[data-side] {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.08s ease, border-color 0.08s ease;
+}
+
+.pst-card[data-side]:hover {
+  border-color: #94a3b8;
+  transform: translateY(-2px);
+}
+
+.pst-glyph {
+  font-size: 96px;
+  line-height: 1;
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+}
+
+.pst-shape {
+  width: 104px;
+  height: 104px;
+}
+
+.pst-keys {
+  display: flex;
+  justify-content: space-between;
+  width: min(440px, 80vw);
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+/* Keeps the feedback screen the same height as the choice screen, so nothing jumps. */
+.pst-keys--placeholder {
+  visibility: hidden;
+}
+
+.pst-keys kbd,
+.pst-panel kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0.1em 0.35em;
+  border: 1px solid #cbd5e1;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #f8fafc;
+  font-family: inherit;
+}
+
+/* Feedback sits where the two cards were, as one tinted card. */
+.pst-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  box-sizing: border-box;
+  width: min(460px, 86vw);
+  height: var(--pst-card, 150px);
+  padding: 0 1.5rem;
+  border-radius: 18px;
+  font-size: 2.1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Original PST colours: blue "Correct!", red "Incorrect". */
+.pst-feedback--win {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.pst-feedback--loss {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.pst-feedback--slow {
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 1.45rem;
+}
+
+.pst-feedback__delta {
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 1.1rem;
+}
+
+.pst-panel {
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 1.15rem 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  text-align: left;
+  line-height: 1.5;
+  font-family: system-ui, sans-serif;
+  color: #0f172a;
+}
+
+.pst-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.3rem;
+}
+
+.pst-panel p {
+  margin: 0.4rem 0;
+}
+
+.pst-muted {
+  font-size: 0.92rem;
+  color: #64748b;
+}
+
+.pst-try {
+  margin-top: 0.7rem !important;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-weight: 600;
+  text-align: center;
+}
+
+.pst-example {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin: 0.65rem 0;
+}
+
+.pst-example .pst-card {
+  width: 84px;
+  height: 84px;
+}
+
+.pst-example .pst-glyph {
+  font-size: 46px;
+}
+
+.pst-example .pst-shape {
+  width: 54px;
+  height: 54px;
+}
+
+/* The end screen replaces jsPsych's (centring) content wrapper, so it centres itself. */
+.pst-results-stage {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1rem;
+}
+
+.pst-results__tiles {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.6rem 0 0.9rem;
+}
+
+.pst-tile {
+  flex: 1;
+  padding: 0.6rem 0.7rem;
+  border-radius: 12px;
+  background: #f1f5f9;
+  text-align: center;
+}
+
+.pst-tile__value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.pst-tile__label {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+/* marimo symbol gallery */
+.pst-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pst-gallery__item {
+  width: 96px;
+  padding: 0.55rem 0.4rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+  color: #334155;
+}
+
+.pst-gallery__item .pst-glyph {
+  font-size: 40px;
+}
+
+.pst-gallery__item .pst-shape {
+  width: 42px;
+  height: 42px;
+}
+
+.pst-gallery__label {
+  margin-top: 0.3rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.pst-gallery__meta {
+  font-size: 0.78rem;
+  color: #475569;
+}
