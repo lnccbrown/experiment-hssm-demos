@@ -34,6 +34,7 @@ def _(project_root):
         fit_diagnostics,
         fit_pst,
         personal_readout,
+        posterior_support_diagnostics,
         posterior_predictive_curves,
         posterior_table,
     )
@@ -75,6 +76,7 @@ def _(project_root):
         pd,
         personal_readout,
         plots,
+        posterior_support_diagnostics,
         posterior_table,
         posterior_predictive_curves,
         pst_config_for_profile,
@@ -676,6 +678,7 @@ def _(
     personal_readout,
     plots,
     posterior_html,
+    posterior_support_diagnostics,
     posterior_predictive_curves,
     posterior_table,
     replay_latents,
@@ -760,8 +763,37 @@ def _(
             )
         _parts.append(posterior_html(_table))
         if _diag["ok"]:
-            with mo.status.spinner(title="Generating native SSMS posterior-predictive datasets…"):
+            with mo.status.spinner(title="Checking LAN support and generating native SSMS posterior predictions…"):
+                _support = posterior_support_diagnostics(_fit, n_draws=40)
                 _ppc = posterior_predictive_curves(_fit, _rows, n_draws=40)
+            _support_items = []
+            for _name, _item in _support["parameters"].items():
+                _support_items.append(
+                    f"<code>{_name}</code>: {_item['clipped']}/{_item['evaluations']} trial evaluations "
+                    f"({_item['rate']:.2%}); {_item['affected_trajectories']}/{_support['trajectories']} "
+                    f"participant-trajectories ({_item['trajectory_rate']:.1%})"
+                )
+            if _support["any_clipped"]:
+                _parts.append(
+                    note(
+                        "The unconstrained learning trajectory exceeded the DDM LAN support in at least one "
+                        "posterior trajectory, so those decision parameters were evaluated at the stated limits. "
+                        + "; ".join(_support_items)
+                        + ".",
+                        kind="warn",
+                        label="LAN clipping occurred.",
+                    )
+                )
+            else:
+                _parts.append(
+                    note(
+                        "No clipping was required in the sampled observed-history trajectories: "
+                        + "; ".join(_support_items)
+                        + ".",
+                        kind="success",
+                        label="LAN support check passed.",
+                    )
+                )
             _first_id = _rows["participant_id"].iloc[0]
             _first = _rows[_rows["participant_id"] == _first_id]
             _participant_draws = _fit.participant_draws(np.arange(_fit.n_samples))

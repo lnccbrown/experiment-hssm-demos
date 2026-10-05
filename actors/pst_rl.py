@@ -113,15 +113,25 @@ class PSTLearner:
 
         return {"values": jnp.full(self.n_symbols, self.initial_value)}
 
-    def compute_python(self, state: dict[str, Any], params: Mapping[str, float], context: Mapping[str, Any]) -> dict[str, float]:
+    def raw_decision_parameters_python(
+        self,
+        state: dict[str, Any],
+        params: Mapping[str, float],
+        context: Mapping[str, Any],
+    ) -> dict[str, float]:
+        """Unclipped trial-wise decision parameters, for explicit LAN-support checks."""
         values = state["values"]
         better, worse = int(context["better_symbol"]), int(context["worse_symbol"])
         raw_v = params["m"] * (values[better] - values[worse])
-        out = {"v": float(np.clip(raw_v, *LAN_DDM_BOUNDS["v"]))}
+        out = {"v": float(raw_v)}
         if self.boundary == "power":
             raw_a = params["bb"] * (float(context["trial"]) / 10.0) ** params["bp"]
-            out["a"] = float(np.clip(raw_a, *LAN_DDM_BOUNDS["a"]))
+            out["a"] = float(raw_a)
         return out
+
+    def compute_python(self, state: dict[str, Any], params: Mapping[str, float], context: Mapping[str, Any]) -> dict[str, float]:
+        raw = self.raw_decision_parameters_python(state, params, context)
+        return {name: float(np.clip(value, *LAN_DDM_BOUNDS[name])) for name, value in raw.items()}
 
     def update_python(self, state: dict[str, Any], params: Mapping[str, float], context: Mapping[str, Any]) -> dict[str, Any]:
         values = np.array(state["values"], dtype=float)

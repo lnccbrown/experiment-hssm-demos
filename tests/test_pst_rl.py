@@ -46,10 +46,13 @@ def test_drift_uses_value_difference_and_boundary_follows_power_law():
 def test_computed_decision_parameters_are_clipped_to_lan_support():
     state = {"values": np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])}
     params = {"eta_pos": 0.1, "eta_neg": 0.1, "m": 10.0, "bb": 2.5, "bp": 0.5}
-    out = PSTLearner().compute_python(state, params, {"better_symbol": 0, "worse_symbol": 1, "trial": 360})
+    context = {"better_symbol": 0, "worse_symbol": 1, "trial": 360}
+    learner = PSTLearner()
+    raw = learner.raw_decision_parameters_python(state, params, context)
+    assert raw["v"] == 10.0 and raw["a"] > LAN_DDM_BOUNDS["a"][1]
+    out = learner.compute_python(state, params, context)
     assert out == {"v": LAN_DDM_BOUNDS["v"][1], "a": LAN_DDM_BOUNDS["a"][1]}
 
-    learner = PSTLearner()
     jax_state = learner.init_jax_state()
     jax_state["values"] = jax_state["values"].at[0].set(1.0)
     jax_out = learner.compute_jax(jax_state, params, {"better_symbol": 0, "worse_symbol": 1, "trial": 360})

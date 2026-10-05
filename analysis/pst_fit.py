@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from actors.pst_rl import PST_EXCLUSION_COLUMN, PSTLearner, PSTSimulator, make_model
+from actors.pst_rl import LAN_DDM_BOUNDS, PST_EXCLUSION_COLUMN, PSTLearner, PSTSimulator, make_model
 
 PARAMETERS: dict[str, tuple[str, str]] = {
     "eta_pos": ("Learning from wins", "How far one positive prediction error moves a symbol's value."),
@@ -325,6 +325,85 @@ def fit_diagnostics(fit: PSTFit) -> dict[str, Any]:
         "min_ess_tail": min_tail,
         "min_bfmi": min_bfmi,
         "max_tree_depth": max_tree_depth,
+    }
+
+
+def posterior_support_diagnostics(
+    fit: PSTFit,
+    *,
+    n_draws: int = 40,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Measure when posterior learning trajectories require LAN-support clipping.
+
+    State updates follow each retained participant's observed choices and outcomes, matching the
+    conditional learning history used by native SSMS PPC. Counts describe the *unclipped* ``v``
+    and dynamic ``a`` values that would fall outside the built-in DDM LAN's validated support.
+    """
+    n_draws = min(int(n_draws), fit.n_samples)
+    if n_draws < 1:
+        raise ValueError("n_draws must be positive")
+
+    rng = np.random.default_rng(seed)
+    sample_ids = rng.choice(fit.n_samples, size=n_draws, replace=False)
+    posterior = fit.participant_draws(sample_ids)
+    participant_ids = fit.table["participant_id"].drop_duplicates().tolist()
+    trajectories = n_draws * len(participant_ids)
+    parameters = {
+        name: {
+            "lower": LAN_DDM_BOUNDS[name][0],
+            "upper": LAN_DDM_BOUNDS[name][1],
+            "evaluations": 0,
+            "clipped": 0,
+            "affected_trajectories": 0,
+        }
+        for name in fit.learner.computed_params
+    }
+
+    ordered = fit.table.sort_values(["participant_id", "trial_id"], kind="stable")
+    participant_rows = {
+        participant_id: ordered[ordered["participant_id"] == participant_id]
+        for participant_id in participant_ids
+    }
+    for draw_index in range(n_draws):
+        for participant_index, participant_id in enumerate(participant_ids):
+            draw = {
+                name: float(values[draw_index, participant_index])
+                for name, values in posterior.items()
+            }
+            state = fit.learner.init_state()
+            affected = {name: False for name in parameters}
+            for row in participant_rows[participant_id].itertuples(index=False):
+                context = {
+                    "better_symbol": row.better_symbol,
+                    "worse_symbol": row.worse_symbol,
+                    "trial": row.trial,
+                }
+                raw = fit.learner.raw_decision_parameters_python(state, draw, context)
+                for name, value in raw.items():
+                    if not np.isfinite(value):
+                        raise ValueError(f"non-finite raw {name} in posterior support check")
+                    item = parameters[name]
+                    clipped = value < item["lower"] or value > item["upper"]
+                    item["evaluations"] += 1
+                    item["clipped"] += int(clipped)
+                    affected[name] = affected[name] or clipped
+                state = fit.learner.update_python(
+                    state,
+                    draw,
+                    {**context, "choice": row.response, "feedback": row.feedback},
+                )
+            for name, was_affected in affected.items():
+                parameters[name]["affected_trajectories"] += int(was_affected)
+
+    for item in parameters.values():
+        item["rate"] = item["clipped"] / item["evaluations"] if item["evaluations"] else 0.0
+        item["trajectory_rate"] = item["affected_trajectories"] / trajectories if trajectories else 0.0
+    return {
+        "draws": n_draws,
+        "trajectories": trajectories,
+        "parameters": parameters,
+        "any_clipped": any(item["clipped"] for item in parameters.values()),
     }
 
 

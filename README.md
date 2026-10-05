@@ -38,12 +38,13 @@ uv run marimo run experiments/pst_demo/pst_app.py
 
 The app starts with a quick 30–60-choice learning game and no final round. Select **Thorough** to
 restore the original demo schedule of 120–240 learning choices; the optional all-pairs final round
-can be enabled independently.
+can be enabled independently. Successful fits report sampler diagnostics, native posterior-predictive
+checks, and how often posterior learning trajectories require clipping to the built-in DDM LAN support.
 
 ### Tests
 
 ```bash
-uv run pytest            # fast tests (Python + browser scripts via node)
+uv run pytest            # fast tests (Python + JavaScript contracts via Node)
 uv run pytest -m slow    # computationally intensive real HSSM fits
 ```
 

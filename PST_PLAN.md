@@ -1,6 +1,6 @@
 # Probabilistic Selection Task: implemented design and scientific scope
 
-Branch `feature/pst-task`, reviewed 2026-09-29.
+Branch `feature/pst-task`, reviewed 2026-10-05.
 
 The marimo app is a shortened, interactive teaching variant of the Probabilistic Selection Task (PST). Its learning model follows the RL-DDM equations in Pedersen, Frank & Biele (2017), and its software path deliberately uses the existing HSSM/ssm-simulators RLSSM tooling.
 
@@ -50,7 +50,7 @@ V_chosen ← V_chosen + eta_sign × (reward − V_chosen)
 
 `eta_pos` is used for a positive prediction error and `eta_neg` otherwise. The simpler selectable model uses one `eta` and a fixed `a`. Initial values are zero, response +1 denotes the better symbol / upper boundary, and `z` is fixed at 0.5. The local DDM parameter `a` is the distance from zero to either bound, one half of the full Wiener boundary separation used in the cited JAGS model; the paper-derived `bb` presets are converted accordingly.
 
-HSSM's built-in DDM LAN is approximate and has finite validated support. Trial-wise `v` is clipped to [-3, 3] and `a` to [0.3, 2.5] in both Python and JAX learner paths. This is explicit in the notebook because it changes the unconstrained scientific model whenever a trajectory reaches a limit.
+HSSM's built-in DDM LAN is approximate and has finite validated support. Trial-wise `v` is clipped to [-3, 3] and `a` to [0.3, 2.5] in both Python and JAX learner paths. This is explicit in the notebook because it changes the unconstrained scientific model whenever a trajectory reaches a limit. After a diagnostically acceptable fit, the app replays sampled posterior participant trajectories along the retained observed learning histories and reports both the fraction of trial evaluations requiring clipping and the fraction of participant-trajectories affected, separately for `v` and dynamic `a`.
 
 ## Fitting
 
@@ -114,7 +114,7 @@ HSSM 0.5.0 and ssm-simulators 0.14.0, which are also the current PyPI releases. 
 LAN's ONNX artifact is fetched from Hugging Face on first use when it is not already cached.
 
 ```bash
-uv run pytest            # fast Python tests plus Node browser-script tests
+uv run pytest            # fast Python tests plus JavaScript contract tests via Node
 uv run pytest -m slow    # real single-participant and hierarchical HSSM fits + native PPC
 uv run marimo check --strict experiments/pst_demo/pst_app.py
 ```
@@ -134,8 +134,24 @@ The slow suite is intentionally computationally intensive; it tests integration,
 - `uv run marimo check --strict experiments/pst_demo/pst_app.py`: passed.
 - `git diff --check`: passed.
 
-The app server was launched successfully at its local URL, but a reliable manual Play → Simulate →
-Fit → Check traversal was not completed: the available browser-control surface repeatedly requested
-macOS automation permission and then blocked on Chrome's first-run profile UI. No manual browser
-behavior is claimed from that attempt; the browser export, isolation, task semantics, fitting and PPC
-paths are covered by the fast and marked integration tests above.
+### Follow-up validation (2026-10-05)
+
+- `.venv/bin/pytest -q`: **53 passed, 2 deselected** in 6.93 s.
+- Slow integration command with writable temporary caches, `env PYTENSOR_FLAGS=base_compiledir=/private/tmp/pst-pytensor MPLCONFIGDIR=/private/tmp/pst-mpl .venv/bin/pytest -q -m slow`:
+  **2 passed, 53 deselected** in 375.18 s. This reran both real
+  HSSM fits and native PPC, and exercised the LAN-support diagnostic against real single-participant
+  and hierarchical posterior shapes. The 16 warnings were the same upstream HSSM/Bambi deprecations
+  and sequential-chain notices on a one-device host.
+- `.venv/bin/marimo check --strict experiments/pst_demo/pst_app.py`: passed.
+- `git diff --check`: passed.
+- `uv lock --check` was not re-certified in the restricted runner: `uv` itself panicked while reading
+  macOS system configuration, before inspecting the project. The lockfile was not changed, and the
+  2026-09-29 lock check remains the latest successful lock validation.
+
+The app server was launched successfully at its local URL for a follow-up smoke-test attempt, but the
+available in-app browser surface was absent and Safari automation was not approved. No manual
+Play → Simulate → Fit → Check behavior is claimed. The Node tests execute task/runtime JavaScript in
+an isolated VM with controlled fakes; they are deterministic contract tests, not a rendering-browser
+test. Python tests cover the schedule/export/security contracts, and the marked suite covers fitting
+and PPC. A headless browser test in CI remains the appropriate way to close the rendered iframe/Marimo
+wiring gap; repeated interactive desktop automation is not used as release evidence.

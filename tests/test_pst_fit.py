@@ -9,6 +9,7 @@ from analysis.pst_fit import (
     fit_diagnostics,
     fit_pst,
     personal_readout,
+    posterior_support_diagnostics,
     posterior_predictive,
     posterior_predictive_curves,
     posterior_table,
@@ -47,6 +48,35 @@ def test_posterior_predictive_uses_native_ssms_ppc_for_choices_and_rts():
     curves = posterior_predictive_curves(FakeFit(), fit_rows(observed), n_draws=1, seed=9)
     assert 0 <= curves["timeout_rate"] <= 1
     assert 0 <= curves["anticipation_rate"] <= 1
+
+
+def test_posterior_support_diagnostic_quantifies_raw_lan_clipping():
+    observed = simulate_players(MIDDLE, n_blocks=1, seed=5)
+    table, _ = fit_table(observed)
+    extreme = {**MIDDLE, "m": 10.0, "bb": 2.5, "bp": 0.5, "z": 0.5}
+
+    class FakeFit:
+        learner = PSTLearner()
+        n_samples = 1
+
+        def __init__(self):
+            self.table = table
+
+        def participant_draws(self, sample_ids):
+            return {
+                name: np.full((len(sample_ids), 1), value)
+                for name, value in extreme.items()
+            }
+
+    diagnostic = posterior_support_diagnostics(FakeFit(), n_draws=1, seed=9)
+    assert diagnostic["draws"] == diagnostic["trajectories"] == 1
+    assert diagnostic["any_clipped"]
+    for name in ("v", "a"):
+        item = diagnostic["parameters"][name]
+        assert item["evaluations"] == len(table)
+        assert item["clipped"] > 0
+        assert item["affected_trajectories"] == 1
+        assert 0 < item["rate"] <= item["trajectory_rate"] == 1
 
 
 def test_personal_readout_is_model_and_session_conditional():
@@ -92,6 +122,7 @@ def test_hierarchical_fit_uses_builtin_lan_and_native_ppc():
     assert np.isfinite(summary[["estimate", "low", "high", "mcse_mean", "ess_bulk"]]).all().all()
     rows = fit_rows(df)
     ppc = posterior_predictive_curves(fit, rows, n_draws=12)
+    support = posterior_support_diagnostics(fit, n_draws=12)
     assert len(ppc["choice"]) == len(learning_curves(df, rows=rows))
     assert ((ppc["choice"]["low"] <= ppc["choice"]["p_better"]) &
             (ppc["choice"]["p_better"] <= ppc["choice"]["high"])).all()
@@ -99,6 +130,8 @@ def test_hierarchical_fit_uses_builtin_lan_and_native_ppc():
             (ppc["rt"]["rt_mean"] <= ppc["rt"]["high"])).all()
     assert 0 <= ppc["timeout_rate"] <= 1 and 0 <= ppc["anticipation_rate"] <= 1
     assert "anticipation" in ppc
+    assert set(support["parameters"]) == {"v", "a"}
+    assert all(item["evaluations"] == len(table) * 12 for item in support["parameters"].values())
     diagnostics = fit_diagnostics(fit)
     assert diagnostics["chains"] == 2 and diagnostics["divergences"] >= 0
     assert not diagnostics["ok"] and "four chains" in " ".join(diagnostics["issues"])
@@ -112,4 +145,5 @@ def test_single_rate_fixed_boundary_variant_fits():
     fit = fit_pst(table, learner=learner, draws=150, tune=150, seed=2)
     assert not fit.hierarchical
     assert list(posterior_table(fit, truth)["symbol"]) == ["eta", "m", "a", "t"]
+    assert set(posterior_support_diagnostics(fit, n_draws=4)["parameters"]) == {"v"}
     assert fit_diagnostics(fit)["chains"] == 4
