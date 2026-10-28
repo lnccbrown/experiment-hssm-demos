@@ -1,0 +1,1 @@
+"""Interactive PAAT Marimo demonstration."""

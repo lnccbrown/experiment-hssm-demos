@@ -77,6 +77,7 @@ export default {{
         );
       }}
       model.set("rows_json", payload.rows_json);
+      model.set("result_received", true);
       model.save_changes();
     }};
     window.addEventListener("message", onMessage);
@@ -107,7 +108,7 @@ def create_jspsych_marimo_bridge(
     session_id: str,
     iframe_id: str,
 ):
-    """Return a hidden marimo UI element that syncs iframe ``rows_json`` to Python."""
+    """Return a source-bound hidden bridge that syncs one iframe's completed export."""
     import anywidget
     import traitlets
     import marimo as mo
@@ -115,5 +116,6 @@ def create_jspsych_marimo_bridge(
     class JsPsychMarimoBridge(anywidget.AnyWidget):
         _esm = _bridge_esm(message_type=message_type, session_id=session_id, iframe_id=iframe_id)
         rows_json = traitlets.Unicode("[]").tag(sync=True)
+        result_received = traitlets.Bool(False).tag(sync=True)
 
     return mo.ui.anywidget(JsPsychMarimoBridge())

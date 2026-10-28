@@ -45,6 +45,8 @@ assert.equal(typeof raw[1].timeline[0].stimulus, "string", "the raw timeline mus
   assert.deepEqual(JSON.parse(JSON.stringify(messages)), [
     { payload: { type: "pst-results", rows_json: "[]", session_id: "nonce-1" }, target: "*" },
   ]);
+  core.postResultsToParent("[]", "jspsych-results");
+  assert.equal(messages[1].payload.session_id, null);
 }
 
 // armDisplayFocus: jsPsych's per-trial focus() must not scroll the host page

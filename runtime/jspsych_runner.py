@@ -22,6 +22,14 @@ _RUNTIME_DIR = Path(__file__).resolve().parent
 
 _PROJECT_ROOT = _RUNTIME_DIR.parent
 
+_JSDELIVR_PRECONNECT_TAG = '<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />'
+
+_VEGA_SCRIPT_URLS = (
+    "https://cdn.jsdelivr.net/npm/vega@5",
+    "https://cdn.jsdelivr.net/npm/vega-lite@5",
+    "https://cdn.jsdelivr.net/npm/vega-embed@6",
+)
+
 
 @dataclass(frozen=True)
 class RunnerConfig:
@@ -96,15 +104,29 @@ def _plugin_script_tags(plugins: tuple[str, ...]) -> str:
         url = JSPSYCH_PLUGIN_CDN.get(name)
         if url is None:
             raise ValueError(f"Unknown jsPsych plugin: {name}")
-        lines.append(f'  <script src="{url}"></script>')
+        lines.append(f'  <script defer crossorigin="anonymous" src="{url}"></script>')
     return "\n".join(lines)
 
 
 def _vega_script_tags() -> str:
-    return (
-        '  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>\n'
-        '  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>\n'
-        '  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>'
+    return "\n".join(
+        f'  <script defer crossorigin="anonymous" src="{url}"></script>'
+        for url in _VEGA_SCRIPT_URLS
+    )
+
+
+def _script_preload_tags(config: RunnerConfig) -> str:
+    urls = [JSPSYCH_CORE_JS]
+    for name in config.plugins:
+        url = JSPSYCH_PLUGIN_CDN.get(name)
+        if url is None:
+            raise ValueError(f"Unknown jsPsych plugin: {name}")
+        urls.append(url)
+    if config.show_results_charts and config.load_vega:
+        urls.extend(_VEGA_SCRIPT_URLS)
+    return "\n".join(
+        f'  <link rel="preload" as="script" crossorigin="anonymous" href="{url}" />'
+        for url in urls
     )
 
 
@@ -156,9 +178,14 @@ def build_jspsych_runner_html(
         .replace("__RUNNER_CONFIG_B64__", config_b64)
         .replace("__TIMELINE_B64__", timeline_b64)
     )
+    template = _runner_template().replace(
+        _JSDELIVR_PRECONNECT_TAG,
+        f"{_JSDELIVR_PRECONNECT_TAG}\n{_script_preload_tags(cfg)}",
+        1,
+    )
 
     return (
-        _runner_template()
+        template
         .replace("__TITLE_SAFE__", title_safe)
         .replace("__JSPSYCH_CORE_CSS__", JSPSYCH_CORE_CSS)
         .replace("__JSPSYCH_CORE_JS__", JSPSYCH_CORE_JS)

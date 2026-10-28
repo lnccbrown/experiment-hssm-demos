@@ -106,7 +106,7 @@ window.JsPsychRunnerCore = (() => {
 
   function postResultsToParent(rowsJson, messageType, sessionId) {
     window.parent.postMessage(
-      { type: messageType, rows_json: rowsJson, session_id: sessionId },
+      { type: messageType, rows_json: rowsJson, session_id: sessionId || null },
       "*",
     );
   }
