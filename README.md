@@ -30,6 +30,8 @@ Or open in the editor:
 uv run marimo edit experiments/coherence_demo/ssm_coherence_demo.py
 ```
 
+**Standalone web experiment** (Vite+ React, no Python): see `web/README.md`.
+
 ### Notes
 
 - The tutorial simulates a **binary left/right motion task** for multiple actors and trials using **jsPsych-style** trial objects in Python; motion previews use **Canvas** in the browser.
