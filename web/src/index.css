@@ -36,7 +36,8 @@ main {
   width: 7rem;
 }
 
-#jspsych-target {
+/* `main` outranks runtime/jspsych_runner.css's `height: 100%`, which is imported later. */
+main #jspsych-target {
   height: 520px;
   border: 1px solid #ddd;
   border-radius: 4px;
