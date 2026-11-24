@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { initJsPsych, type JsPsych } from "jspsych";
+import { isTauri } from "@tauri-apps/api/core";
+import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
 import vegaEmbed from "vega-embed";
 import "jspsych/css/jspsych.css";
 // Shared with the marimo runner; plain scripts that install window globals.
@@ -10,6 +12,18 @@ import "../../runtime/demo_results_charts.js";
 import { buildCoherenceTimeline, DEFAULT_DISPLAY } from "./experiment";
 
 window.vegaEmbed = vegaEmbed;
+
+// WKWebView (the Tauri webview on macOS/iOS) ignores <a download>, so the app writes to
+// Documents instead (shown in the iOS Files app via src-tauri/Info.ios.plist).
+async function saveData(jsPsych: JsPsych): Promise<string> {
+  const name = `motion_coherence_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  if (!isTauri()) {
+    jsPsych.data.get().localSave("json", name);
+    return `Downloaded ${name}`;
+  }
+  await writeTextFile(name, jsPsych.data.get().json(), { baseDir: BaseDirectory.Document });
+  return `Saved to Documents/${name}`;
+}
 
 type Settings = { a: number; b: number; c: number; reps: number; lifetime: number };
 
@@ -49,6 +63,7 @@ export default function App() {
   });
   const [runId, setRunId] = useState(0);
   const [finished, setFinished] = useState<JsPsych | null>(null);
+  const [saveStatus, setSaveStatus] = useState("");
   const set = (key: keyof Settings) => (v: number) => setSettings((s) => ({ ...s, [key]: v }));
 
   useEffect(() => {
@@ -82,6 +97,7 @@ export default function App() {
 
   const restart = () => {
     setFinished(null);
+    setSaveStatus("");
     setRunId((n) => n + 1);
   };
 
@@ -143,11 +159,16 @@ export default function App() {
         {finished && (
           <button
             type="button"
-            onClick={() => finished.data.get().localSave("json", "motion_coherence_data.json")}
+            onClick={() =>
+              saveData(finished).then(setSaveStatus, (e: unknown) =>
+                setSaveStatus(`Save failed: ${String(e)}`),
+              )
+            }
           >
-            Download data (JSON)
+            Save data (JSON)
           </button>
         )}
+        <span role="status">{saveStatus}</span>
       </div>
     </main>
   );
