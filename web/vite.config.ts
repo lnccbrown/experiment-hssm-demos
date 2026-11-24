@@ -28,6 +28,17 @@ export default defineConfig({
     ],
   },
   plugins: lazyPlugins(() => [react()]),
-  // Shared stimulus/runner assets live in ../renderers and ../runtime.
-  server: { fs: { allow: [".."] } },
+  // Tauri expects a fixed port; `tauri ios dev` sets TAURI_DEV_HOST so the device can reach Vite.
+  clearScreen: false,
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: process.env.TAURI_DEV_HOST || false,
+    hmr: process.env.TAURI_DEV_HOST
+      ? { protocol: "ws", host: process.env.TAURI_DEV_HOST, port: 1421 }
+      : undefined,
+    // Shared stimulus/runner assets live in ../renderers and ../runtime.
+    fs: { allow: [".."] },
+    watch: { ignored: ["**/src-tauri/**"] },
+  },
 });
