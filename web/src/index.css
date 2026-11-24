@@ -1,0 +1,50 @@
+/* Runner css (runtime/jspsych_runner.css) is written for a full-page iframe; let this page scroll. */
+html,
+body {
+  overflow: auto;
+  height: auto;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  color: #111;
+  background: #fff;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  gap: 0.25rem;
+}
+
+.controls input {
+  width: 7rem;
+}
+
+/* `main` outranks runtime/jspsych_runner.css's `height: 100%`, which is imported later. */
+main #jspsych-target {
+  height: 520px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
